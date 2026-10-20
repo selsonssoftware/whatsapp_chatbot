@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Button, Card, Badge, SearchBar, Icon, Input, Tabs, Drawer } from '../../components/index.js'
+import { Button, Card, Badge, SearchBar, Icon, Drawer } from '../../components/index.js'
 
-const DEMO_API_LOGS = [
+const SEED_API_LOGS = [
   { id: 1, method: 'POST', endpoint: '/api/messages/send', status: 200, duration: 245, timestamp: '2026-01-15 10:30:45', summary: 'Message sent successfully' },
   { id: 2, method: 'GET', endpoint: '/api/contacts', status: 200, duration: 89, timestamp: '2026-01-15 10:29:12', summary: 'Retrieved 25 contacts' },
   { id: 3, method: 'POST', endpoint: '/api/templates', status: 201, duration: 156, timestamp: '2026-01-15 10:28:33', summary: 'Template created' },
@@ -11,7 +11,7 @@ const DEMO_API_LOGS = [
 ]
 
 export default function ApiLogsPage() {
-  const [logs, setLogs] = useState(DEMO_API_LOGS)
+  const [logs, setLogs] = useState(SEED_API_LOGS)
   const [search, setSearch] = useState('')
   const [methodFilter, setMethodFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -52,10 +52,22 @@ export default function ApiLogsPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">API Logs</h1>
           <p className="text-gray-600 dark:text-gray-400">Monitor API requests and responses</p>
         </div>
-        <Button variant="secondary" onClick={exportLogs}>
-          <Icon name="Download" size={16} />
-          Export CSV
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={exportLogs}>
+            <Icon name="Download" size={16} />
+            Export CSV
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (!confirm('Clear all API logs? This cannot be undone.')) return
+              setLogs([])
+            }}
+          >
+            <Icon name="Trash2" size={16} />
+            Clear Logs
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-4 mb-6">
@@ -165,13 +177,13 @@ export default function ApiLogsPage() {
               <p>{selectedLog.summary}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Request Body (Demo)</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Request Body</p>
               <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded text-xs overflow-auto">
                 {JSON.stringify({ data: 'Sample request data...' }, null, 2)}
               </pre>
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Response Body (Demo)</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Response Body</p>
               <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded text-xs overflow-auto">
                 {JSON.stringify({ success: true, message: 'Sample response...' }, null, 2)}
               </pre>

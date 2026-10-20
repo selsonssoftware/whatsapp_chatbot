@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Button, Card, Badge, Tabs, SearchBar, Drawer, Icon, Input } from '../../components/index.js'
 
-const DEMO_LEADS = [
+const SEED_LEADS = [
   { id: 1, name: 'John Smith', company: 'Acme Corp', value: 5000, stage: 'new', source: 'Website', assignedTo: 'Alex Agent', contactId: 1, createdAt: '2026-01-10', notes: '', activities: [] },
   { id: 2, name: 'Sarah Johnson', company: 'Beta Inc', value: 12000, stage: 'qualified', source: 'Referral', assignedTo: 'Sam Support', contactId: 2, createdAt: '2026-01-12', notes: '', activities: [] },
   { id: 3, name: 'Mike Brown', company: 'Gamma LLC', value: 8000, stage: 'proposal', source: 'LinkedIn', assignedTo: 'Alex Agent', contactId: null, createdAt: '2026-01-14', notes: '', activities: [] },
@@ -12,7 +12,7 @@ const DEMO_LEADS = [
 const STAGES = ['new', 'qualified', 'proposal', 'negotiation', 'closed']
 
 export default function LeadsPage() {
-  const [leads, setLeads] = useState(DEMO_LEADS)
+  const [leads, setLeads] = useState(SEED_LEADS)
   const [view, setView] = useState('kanban')
   const [search, setSearch] = useState('')
   const [selectedLead, setSelectedLead] = useState(null)

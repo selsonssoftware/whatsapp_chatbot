@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Button, Card, Badge, SearchBar, Icon, Tabs, Drawer } from '../../components/index.js'
+import { Button, Card, Badge, SearchBar, Icon, Drawer } from '../../components/index.js'
 
-const DEMO_SCHEDULE_LOGS = [
+const SEED_SCHEDULE_LOGS = [
   { id: 1, type: 'campaign', name: 'Welcome Campaign', status: 'sent', scheduledAt: '2026-01-15 10:00', executedAt: '2026-01-15 10:05', recipients: 1250, delivered: 1180, failed: 70 },
   { id: 2, type: 'automation', name: 'New Lead Follow-up', status: 'pending', scheduledAt: '2026-01-16 09:00', executedAt: null, recipients: 50, delivered: 0, failed: 0 },
   { id: 3, type: 'campaign', name: 'Flash Sale', status: 'in_progress', scheduledAt: '2026-01-15 14:00', executedAt: '2026-01-15 14:01', recipients: 2000, delivered: 850, failed: 20 },
@@ -10,7 +10,7 @@ const DEMO_SCHEDULE_LOGS = [
 ]
 
 export default function ScheduleLogsPage() {
-  const [logs, setLogs] = useState(DEMO_SCHEDULE_LOGS)
+  const [logs, setLogs] = useState(SEED_SCHEDULE_LOGS)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -227,7 +227,7 @@ export default function ScheduleLogsPage() {
             <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded">
               <p className="text-sm text-blue-800 dark:text-blue-400">
                 <Icon name="Info" size={16} className="inline mr-1" />
-                Demo Mode: No actual background jobs are running.
+                Simulation: no actual background jobs are running.
               </p>
             </div>
           </div>

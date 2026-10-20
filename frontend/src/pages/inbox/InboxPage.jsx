@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { DEMO_CONVERSATIONS, DEMO_CONTACTS } from '../../data/demoData.js'
+import { useNavigate } from 'react-router-dom'
+import { CONVERSATIONS, CONTACTS } from '../../data/seedData.js'
 import { Badge, Button, Tabs, Icon, Drawer } from '../../components/index.js'
 
 export default function InboxPage() {
-  const [conversations, setConversations] = useState(DEMO_CONVERSATIONS)
+  const navigate = useNavigate()
+  const [conversations, setConversations] = useState(CONVERSATIONS)
   const [selectedId, setSelectedId] = useState(conversations[0]?.id)
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
@@ -13,12 +15,14 @@ export default function InboxPage() {
   const [notes, setNotes] = useState('')
 
   const selected = conversations.find((c) => c.id === selectedId)
-  const contact = DEMO_CONTACTS.find((c) => c.id === selected?.contactId)
+  const contact = CONTACTS.find((c) => c.id === selected?.contactId)
 
   const filtered = conversations.filter((c) => {
     const matchesFilter =
       filter === 'unread' ? c.unread > 0 : filter === 'unassigned' ? !c.assignedTo : filter === 'resolved' ? c.status === 'resolved' : true
-    const matchesSearch = (c.lastMessage || '').toLowerCase().includes(search.toLowerCase())
+    const convContact = CONTACTS.find((contact) => contact.id === c.contactId)
+    const contactLabel = `${convContact?.firstName || ''} ${convContact?.lastName || ''} ${convContact?.phone || ''}`
+    const matchesSearch = (contactLabel + ' ' + (c.lastMessage || '')).toLowerCase().includes(search.toLowerCase())
     return matchesFilter && matchesSearch
   })
 
@@ -49,7 +53,10 @@ export default function InboxPage() {
 
   const assignAgent = (agent) => {
     setConversations((prev) => prev.map((c) => (c.id === selectedId ? { ...c, assignedTo: agent } : c)))
-    setShowAssignModal(false)
+  }
+
+  const setPriority = (priority) => {
+    setConversations((prev) => prev.map((c) => (c.id === selectedId ? { ...c, priority } : c)))
   }
 
   const addNote = () => {
@@ -61,16 +68,26 @@ export default function InboxPage() {
   }
 
   const updateContact = (field, value) => {
-    const contactIndex = DEMO_CONTACTS.findIndex((c) => c.id === contact?.id)
+    const contactIndex = CONTACTS.findIndex((c) => c.id === contact?.id)
     if (contactIndex >= 0) {
-      DEMO_CONTACTS[contactIndex] = { ...DEMO_CONTACTS[contactIndex], [field]: value }
+      CONTACTS[contactIndex] = { ...CONTACTS[contactIndex], [field]: value }
     }
   }
 
   const agents = ['Alex Agent', 'Sam Support', 'Morgan Manager']
 
   return (
-    <div className="inbox">
+    <div className="flex flex-col" style={{ height: 'calc(100vh - var(--header-height) - 3rem)' }}>
+      <div className="flex items-center justify-between gap-3 mb-4 shrink-0">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">Team Inbox</h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            {conversations.length} conversations · replies are simulated and never delivered to WhatsApp
+          </p>
+        </div>
+      </div>
+
+      <div className="inbox flex-1 min-h-0">
       <div className={`inbox-list ${mobileView === 'list' ? 'show' : ''}`}>
         <div className="p-3 border-b border-gray-200 dark:border-gray-700">
           <input
@@ -93,7 +110,7 @@ export default function InboxPage() {
         />
         <div className="overflow-y-auto flex-1">
           {filtered.map((c) => {
-            const convContact = DEMO_CONTACTS.find((contact) => contact.id === c.contactId)
+            const convContact = CONTACTS.find((contact) => contact.id === c.contactId)
             return (
               <div
                 key={c.id}
@@ -142,6 +159,29 @@ export default function InboxPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <select
+                  value={selected.assignedTo || ''}
+                  onChange={(e) => assignAgent(e.target.value)}
+                  aria-label="Assign agent"
+                  className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="">Unassigned</option>
+                  {agents.map((agent) => (
+                    <option key={agent} value={agent}>
+                      {agent}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={selected.priority || 'medium'}
+                  onChange={(e) => setPriority(e.target.value)}
+                  aria-label="Set priority"
+                  className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
                 <Button variant="secondary" size="sm" onClick={() => setShowDetails(true)}>
                   <Icon name="Info" size={16} />
                   Details
@@ -163,6 +203,12 @@ export default function InboxPage() {
                 <div key={m.id} className={m.type}>
                   <p>{m.text}</p>
                   <small className="text-xs text-gray-500">{m.time}</small>
+                </div>
+              ))}
+              {(selected.notes || []).map((note, index) => (
+                <div key={`note-${index}`} className="internal-note">
+                  <p>{note.text}</p>
+                  <small className="text-xs text-gray-500">Internal note - {new Date(note.time).toLocaleString()}</small>
                 </div>
               ))}
             </div>
@@ -195,7 +241,9 @@ export default function InboxPage() {
             <Button variant="secondary" onClick={() => setShowDetails(false)}>
               Close
             </Button>
-            <Button variant="primary">Send Message</Button>
+            <Button variant="primary" onClick={() => { setShowDetails(false); navigate('/compose') }}>
+              Send Message
+            </Button>
           </>
         }
       >
@@ -294,6 +342,7 @@ export default function InboxPage() {
           </div>
         )}
       </Drawer>
+      </div>
     </div>
   )
 }

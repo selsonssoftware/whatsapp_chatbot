@@ -2,49 +2,52 @@ import { useState } from 'react'
 import { getProducts, saveProducts, getCategories, saveCategories } from '../../services/catalogService.js'
 import { Button, Card, Badge, SearchBar, Icon, Input, Modal, Tabs } from '../../components/index.js'
 
-const DEMO_PRODUCTS = [
-  { id: 1, name: 'Premium T-Shirt', sku: 'TS001', description: 'High-quality cotton t-shirt', category: 'Apparel', price: 29.99, currency: 'USD', stock: 50, image: '', status: 'active', updatedAt: '2026-01-10' },
-  { id: 2, name: 'Wireless Headphones', sku: 'WH001', description: 'Bluetooth wireless headphones', category: 'Electronics', price: 99.99, currency: 'USD', stock: 30, image: '', status: 'active', updatedAt: '2026-01-11' },
-  { id: 3, name: 'Running Shoes', sku: 'RS001', description: 'Comfortable running shoes', category: 'Apparel', price: 79.99, currency: 'USD', stock: 25, image: '', status: 'active', updatedAt: '2026-01-12' },
-  { id: 4, name: 'Smart Watch', sku: 'SW001', description: 'Feature-rich smartwatch', category: 'Electronics', price: 149.99, currency: 'USD', stock: 15, image: '', status: 'active', updatedAt: '2026-01-13' },
-]
+const EMPTY_FORM = { name: '', sku: '', description: '', category: '', price: '', stock: '', status: 'active' }
 
 export default function CatalogPage() {
-  const [products, setProducts] = useState(DEMO_PRODUCTS)
-  const [categories] = useState(['Apparel', 'Electronics', 'Accessories'])
+  const [products, setProducts] = useState(() => getProducts())
+  const [categories, setCategories] = useState(() => getCategories())
   const [search, setSearch] = useState('')
   const [view, setView] = useState('table')
   const [categoryFilter, setCategoryFilter] = useState('all')
+  const [stockFilter, setStockFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [showForm, setShowForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [form, setForm] = useState({ name: '', sku: '', description: '', category: '', price: '', stock: '', status: 'active' })
+  const [errors, setErrors] = useState({})
   const [showPreview, setShowPreview] = useState(false)
   const [previewProduct, setPreviewProduct] = useState(null)
+  const [showCategories, setShowCategories] = useState(false)
+  const [newCategory, setNewCategory] = useState('')
+  const [categoryError, setCategoryError] = useState('')
 
   const filtered = products.filter(
     (p) =>
       (p.name + p.sku + p.description).toLowerCase().includes(search.toLowerCase()) &&
-      (categoryFilter === 'all' || p.category === categoryFilter)
+      (categoryFilter === 'all' || p.category === categoryFilter) &&
+      (statusFilter === 'all' || p.status === statusFilter) &&
+      (stockFilter === 'all' ||
+        (stockFilter === 'out' ? p.stock <= 0 : stockFilter === 'low' ? p.stock > 0 && p.stock <= 10 : p.stock > 10))
   )
 
-  const createProduct = () => {
-    if (!form.name || !form.sku || !form.price) {
-      alert('Name, SKU, and price are required')
-      return
-    }
-    const newProduct = {
-      ...form,
-      id: Date.now(),
-      price: Number(form.price),
-      stock: Number(form.stock),
-      currency: 'USD',
-      image: '',
-      updatedAt: new Date().toISOString().slice(0, 10),
-    }
-    setProducts((prev) => [...prev, newProduct])
-    saveProducts([...products, newProduct])
-    setShowForm(false)
-    setForm({ name: '', sku: '', description: '', category: '', price: '', stock: '', status: 'active' })
+  const validateForm = () => {
+    const e = {}
+    if (!form.name.trim()) e.name = 'Product name is required'
+    if (!form.sku.trim()) e.sku = 'SKU is required'
+    else if (products.some((p) => p.sku.toLowerCase() === form.sku.trim().toLowerCase() && p.id !== editingProduct?.id))
+      e.sku = 'SKU already exists'
+    if (form.price === '' || Number.isNaN(Number(form.price))) e.price = 'Enter a valid price'
+    else if (Number(form.price) < 0) e.price = 'Price cannot be negative'
+    if (form.stock === '' || Number.isNaN(Number(form.stock))) e.stock = 'Enter a valid quantity'
+    else if (Number(form.stock) < 0) e.stock = 'Stock cannot be negative'
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
+
+  const persistProducts = (next) => {
+    setProducts(next)
+    saveProducts(next)
   }
 
   const editProduct = (product) => {
@@ -62,10 +65,7 @@ export default function CatalogPage() {
   }
 
   const saveProduct = () => {
-    if (!form.name || !form.sku || !form.price) {
-      alert('Name, SKU, and price are required')
-      return
-    }
+    if (!validateForm()) return
     const productData = {
       ...form,
       price: Number(form.price),
@@ -74,24 +74,22 @@ export default function CatalogPage() {
     }
 
     if (editingProduct) {
-      setProducts((prev) => prev.map((p) => (p.id === editingProduct.id ? { ...p, ...productData } : p)))
-      saveProducts(products.map((p) => (p.id === editingProduct.id ? { ...p, ...productData } : p)))
+      const next = products.map((p) => (p.id === editingProduct.id ? { ...p, ...productData } : p))
+      persistProducts(next)
     } else {
       const newProduct = { ...productData, id: Date.now(), currency: 'USD', image: '' }
-      setProducts((prev) => [...prev, newProduct])
-      saveProducts([...products, newProduct])
+      persistProducts([...products, newProduct])
     }
 
     setShowForm(false)
     setEditingProduct(null)
     setForm({ name: '', sku: '', description: '', category: '', price: '', stock: '', status: 'active' })
+    setErrors({})
   }
 
   const deleteProduct = (id) => {
     if (!confirm('Delete this product?')) return
-    const next = products.filter((p) => p.id !== id)
-    setProducts(next)
-    saveProducts(next)
+    persistProducts(products.filter((p) => p.id !== id))
   }
 
   const duplicateProduct = (product) => {
@@ -103,8 +101,51 @@ export default function CatalogPage() {
       stock: 0,
       updatedAt: new Date().toISOString().slice(0, 10),
     }
-    setProducts((prev) => [...prev, copy])
-    saveProducts([...products, copy])
+    persistProducts([...products, copy])
+  }
+
+  const addCategory = () => {
+    const name = newCategory.trim()
+    if (!name) {
+      setCategoryError('Category name is required')
+      return
+    }
+    if (categories.some((c) => c.toLowerCase() === name.toLowerCase())) {
+      setCategoryError('Category already exists')
+      return
+    }
+    const next = [...categories, name]
+    setCategories(next)
+    saveCategories(next)
+    setNewCategory('')
+    setCategoryError('')
+  }
+
+  const renameCategory = (oldName, newName) => {
+    const name = newName.trim()
+    if (!name) return
+    if (categories.some((c) => c !== oldName && c.toLowerCase() === name.toLowerCase())) {
+      setCategoryError('Category already exists')
+      return
+    }
+    const nextCategories = categories.map((c) => (c === oldName ? name : c))
+    setCategories(nextCategories)
+    saveCategories(nextCategories)
+    persistProducts(products.map((p) => (p.category === oldName ? { ...p, category: name } : p)))
+    setCategoryError('')
+  }
+
+  const deleteCategory = (name) => {
+    const inUse = products.filter((p) => p.category === name).length
+    if (inUse > 0) {
+      setCategoryError(`"${name}" is still used by ${inUse} product(s). Reassign them before deleting.`)
+      return
+    }
+    if (!confirm(`Delete category "${name}"?`)) return
+    const next = categories.filter((c) => c !== name)
+    setCategories(next)
+    saveCategories(next)
+    setCategoryError('')
   }
 
   const preview = (product) => {
@@ -115,40 +156,59 @@ export default function CatalogPage() {
   const totalProducts = products.length
   const totalStock = products.reduce((sum, p) => sum + p.stock, 0)
   const totalValue = products.reduce((sum, p) => sum + p.price * p.stock, 0)
+  const activeProducts = products.filter((p) => p.status === 'active').length
+  const lowStockProducts = products.filter((p) => p.stock > 0 && p.stock <= 10).length
+  const outOfStockProducts = products.filter((p) => p.stock <= 0).length
 
   return (
     <div className="page">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Catalog</h1>
           <p className="text-gray-600 dark:text-gray-400">Manage your product catalog for WhatsApp commerce</p>
         </div>
-        <Button variant="primary" onClick={() => { setEditingProduct(null); setForm({ name: '', sku: '', description: '', category: '', price: '', stock: '', status: 'active' }); setShowForm(true) }}>
-          <Icon name="Plus" size={16} />
-          Add Product
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => { setShowCategories(true); setCategoryError('') }}>
+            <Icon name="Folder" size={16} />
+            Categories
+          </Button>
+          <Button variant="primary" onClick={() => { setEditingProduct(null); setForm(EMPTY_FORM); setErrors({}); setShowForm(true) }}>
+            <Icon name="Plus" size={16} />
+            Add Product
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Card>
           <p className="text-sm text-gray-600 dark:text-gray-400">Total Products</p>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{totalProducts}</p>
         </Card>
         <Card>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Total Stock</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{totalStock}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Active Products</p>
+          <p className="text-2xl font-bold text-green-600 dark:text-green-400">{activeProducts}</p>
         </Card>
         <Card>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Inventory Value</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">${totalValue.toLocaleString()}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Low Stock</p>
+          <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{lowStockProducts}</p>
+        </Card>
+        <Card>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Out of Stock</p>
+          <p className="text-2xl font-bold text-red-600 dark:text-red-400">{outOfStockProducts}</p>
         </Card>
       </div>
 
-      <div className="flex items-center gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-2 text-sm text-gray-600 dark:text-gray-400">
+        <p>Units in stock: <span className="font-semibold text-gray-900 dark:text-gray-100">{totalStock}</span></p>
+        <p className="md:text-right">Inventory value: <span className="font-semibold text-gray-900 dark:text-gray-100">${totalValue.toLocaleString()}</span></p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 mb-6">
         <SearchBar value={search} onChange={setSearch} placeholder="Search products..." />
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
+          aria-label="Filter by category"
           className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
         >
           <option value="all">All Categories</option>
@@ -157,6 +217,27 @@ export default function CatalogPage() {
               {cat}
             </option>
           ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="Filter by status"
+          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+        >
+          <option value="all">All Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <select
+          value={stockFilter}
+          onChange={(e) => setStockFilter(e.target.value)}
+          aria-label="Filter by stock"
+          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+        >
+          <option value="all">All Stock</option>
+          <option value="in">In stock</option>
+          <option value="low">Low stock</option>
+          <option value="out">Out of stock</option>
         </select>
         <Tabs
           tabs={[
@@ -266,8 +347,8 @@ export default function CatalogPage() {
         }
       >
         <div className="space-y-4">
-          <Input label="Product Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <Input label="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
+          <Input label="Product Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} error={errors.name} />
+          <Input label="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} error={errors.sku} />
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
             <textarea
@@ -293,8 +374,8 @@ export default function CatalogPage() {
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Price" type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
-            <Input label="Stock" type="number" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
+            <Input label="Price" type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} error={errors.price} />
+            <Input label="Stock" type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} error={errors.stock} />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
@@ -332,8 +413,8 @@ export default function CatalogPage() {
                 <span className="text-xl font-bold text-brand-600 dark:text-brand-400">${previewProduct.price.toFixed(2)}</span>
                 <Badge variant={previewProduct.stock > 10 ? 'success' : 'warning'}>{previewProduct.stock} available</Badge>
               </div>
-              <Button variant="primary" className="w-full mt-3">
-                Add to Cart
+              <Button variant="primary" className="w-full mt-3" disabled title="Cart actions are handled by the backend in production">
+                Add to Cart (preview only)
               </Button>
             </div>
             <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded">
@@ -344,6 +425,48 @@ export default function CatalogPage() {
             </div>
           </div>
         )}
+      </Modal>
+      <Modal
+        isOpen={showCategories}
+        onClose={() => { setShowCategories(false); setCategoryError('') }}
+        title="Manage Categories"
+        footer={
+          <Button variant="secondary" onClick={() => { setShowCategories(false); setCategoryError('') }}>
+            Close
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <input
+              value={newCategory}
+              onChange={(e) => { setNewCategory(e.target.value); setCategoryError('') }}
+              placeholder="New category name"
+              aria-label="New category name"
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            />
+            <Button variant="primary" onClick={addCategory}>
+              Add
+            </Button>
+          </div>
+          {categoryError && <p className="error">{categoryError}</p>}
+          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+            {categories.map((cat) => (
+              <li key={cat} className="flex items-center gap-2 py-2">
+                <input
+                  defaultValue={cat}
+                  aria-label={`Rename ${cat}`}
+                  onBlur={(e) => renameCategory(cat, e.target.value)}
+                  className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                />
+                <span className="text-xs text-gray-500">{products.filter((p) => p.category === cat).length} product(s)</span>
+                <button className="icon-btn text-red-600" onClick={() => deleteCategory(cat)} aria-label={`Delete ${cat}`}>
+                  <Icon name="Trash2" size={16} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </Modal>
     </div>
   )

@@ -1,75 +1,26 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Button, Card, Badge, Tabs, SearchBar, Modal, Icon, Input } from '../../components/index.js'
 import { getTemplates } from '../../services/templateService.js'
-import { DEMO_CONTACTS } from '../../data/demoData.js'
+import { CONTACTS } from '../../data/seedData.js'
+import { getCampaigns, saveCampaigns } from '../../services/campaignService.js'
 
-const DEMO_CAMPAIGNS = [
-  {
-    id: 1,
-    name: 'Welcome Campaign',
-    status: 'completed',
-    recipients: 1250,
-    sent: 1250,
-    delivered: 1180,
-    read: 950,
-    failed: 70,
-    templateId: 1,
-    scheduledAt: '2026-01-10 10:00',
-    sentAt: '2026-01-10 10:05',
-    createdAt: '2026-01-08',
-  },
-  {
-    id: 2,
-    name: 'Product Launch',
-    status: 'completed',
-    recipients: 850,
-    sent: 850,
-    delivered: 820,
-    read: 680,
-    failed: 30,
-    templateId: 1,
-    scheduledAt: '2026-01-12 14:00',
-    sentAt: '2026-01-12 14:02',
-    createdAt: '2026-01-11',
-  },
-  {
-    id: 3,
-    name: 'Flash Sale',
-    status: 'in_progress',
-    recipients: 2000,
-    sent: 1800,
-    delivered: 1720,
-    read: 1200,
-    failed: 80,
-    templateId: 1,
-    scheduledAt: '2026-01-15 09:00',
-    sentAt: '2026-01-15 09:01',
-    createdAt: '2026-01-13',
-  },
-  {
-    id: 4,
-    name: 'Follow-up',
-    status: 'scheduled',
-    recipients: 500,
-    sent: 0,
-    delivered: 0,
-    read: 0,
-    failed: 0,
-    templateId: 2,
-    scheduledAt: '2026-01-20 10:00',
-    sentAt: null,
-    createdAt: '2026-01-16',
-  },
-]
 
 export default function CampaignsPage() {
-  const [campaigns, setCampaigns] = useState(DEMO_CAMPAIGNS)
+  const [campaigns, setCampaigns] = useState(() => getCampaigns())
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
   const [selectedCampaign, setSelectedCampaign] = useState(null)
   const [templates] = useState(() => getTemplates())
+
+  const updateCampaigns = (updater) => {
+    setCampaigns((prev) => {
+      const next = updater(prev)
+      saveCampaigns(next)
+      return next
+    })
+  }
   const [form, setForm] = useState({ name: '', templateId: '', recipients: '', scheduledDate: '', scheduledTime: '' })
   const [selectedContacts, setSelectedContacts] = useState([])
 
@@ -100,7 +51,7 @@ export default function CampaignsPage() {
       createdAt: new Date().toISOString().slice(0, 10),
     }
 
-    setCampaigns((prev) => [...prev, newCampaign])
+    updateCampaigns((prev) => [...prev, newCampaign])
     setShowForm(false)
     setForm({ name: '', templateId: '', recipients: '', scheduledDate: '', scheduledTime: '' })
     setSelectedContacts([])
@@ -113,17 +64,17 @@ export default function CampaignsPage() {
 
   const pauseCampaign = (id) => {
     if (!confirm('Pause this campaign?')) return
-    setCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'paused' } : c)))
+    updateCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'paused' } : c)))
   }
 
   const resumeCampaign = (id) => {
     if (!confirm('Resume this campaign?')) return
-    setCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'in_progress' } : c)))
+    updateCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'in_progress' } : c)))
   }
 
   const cancelCampaign = (id) => {
     if (!confirm('Cancel this campaign?')) return
-    setCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'cancelled' } : c)))
+    updateCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'cancelled' } : c)))
   }
 
   const duplicateCampaign = (campaign) => {
@@ -140,12 +91,12 @@ export default function CampaignsPage() {
       sentAt: null,
       createdAt: new Date().toISOString().slice(0, 10),
     }
-    setCampaigns((prev) => [...prev, copy])
+    updateCampaigns((prev) => [...prev, copy])
   }
 
   const deleteCampaign = (id) => {
     if (!confirm('Delete this campaign?')) return
-    setCampaigns((prev) => prev.filter((c) => c.id !== id))
+    updateCampaigns((prev) => prev.filter((c) => c.id !== id))
   }
 
   const statusColors = {
@@ -332,7 +283,7 @@ export default function CampaignsPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Recipients</label>
             <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md">
-              {DEMO_CONTACTS.map((c) => (
+              {CONTACTS.map((c) => (
                 <label key={c.id} className="flex items-center gap-3 p-3 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
                   <input
                     type="checkbox"
@@ -407,7 +358,7 @@ export default function CampaignsPage() {
             <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
               <p className="text-sm text-amber-800 dark:text-amber-400">
                 <Icon name="Info" size={16} className="inline mr-1" />
-                Demo Mode: Campaign execution is simulated. No actual messages are sent.
+                Simulation: campaign execution is simulated. No actual messages are sent.
               </p>
             </div>
           </div>

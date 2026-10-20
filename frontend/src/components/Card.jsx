@@ -1,4 +1,6 @@
-export default function Card({ children, className = '', title, actions }) {
+import { memo } from 'react'
+
+const Card = memo(function Card({ children, className = '', title, actions }) {
   return (
     <div className={`card ${className}`}>
       {(title || actions) && (
@@ -10,4 +12,6 @@ export default function Card({ children, className = '', title, actions }) {
       {children}
     </div>
   )
-}
+})
+
+export default Card

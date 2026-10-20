@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { getTemplates } from '../../services/templateService.js'
-import { DEMO_CONTACTS } from '../../data/demoData.js'
+import { createCampaignRecord } from '../../services/campaignService.js'
+import { CONTACTS } from '../../data/seedData.js'
 import { Button, Card, Input, Badge, Tabs, Icon, SearchBar } from '../../components/index.js'
 
 export default function ComposePage() {
@@ -17,6 +18,7 @@ export default function ComposePage() {
   const [isScheduled, setIsScheduled] = useState(false)
   const [search, setSearch] = useState('')
   const [showPreview, setShowPreview] = useState(false)
+  const [feedback, setFeedback] = useState(null)
 
   const onTemplateChange = (e) => {
     setTemplateId(e.target.value)
@@ -36,7 +38,7 @@ export default function ComposePage() {
   }
 
   const selectAllContacts = () => {
-    setSelectedContacts(DEMO_CONTACTS.map((c) => c.id))
+    setSelectedContacts(CONTACTS.map((c) => c.id))
   }
 
   const clearSelection = () => {
@@ -44,7 +46,7 @@ export default function ComposePage() {
     setSelectedGroups([])
   }
 
-  const filteredContacts = DEMO_CONTACTS.filter((c) =>
+  const filteredContacts = CONTACTS.filter((c) =>
     (c.firstName + ' ' + c.lastName + ' ' + c.phone).toLowerCase().includes(search.toLowerCase())
   )
 
@@ -52,16 +54,35 @@ export default function ComposePage() {
 
   const handleSend = () => {
     if (!body.trim() || selectedContacts.length === 0) {
-      alert('Please select recipients and enter a message')
+      setFeedback({ type: 'error', message: 'Please select recipients and enter a message' })
       return
     }
     if (isScheduled && (!scheduleDate || !scheduleTime)) {
-      alert('Please select schedule date and time')
+      setFeedback({ type: 'error', message: 'Please select a schedule date and time' })
       return
     }
     const action = isScheduled ? 'schedule' : 'send'
     if (!confirm(`Are you sure you want to ${action} this message to ${selectedContacts.length} recipients?`)) return
-    alert(`Demo message ${action === 'schedule' ? 'scheduled' : 'sent'} successfully`)
+
+    const recipientCount =
+      selectedContacts.length +
+      selectedGroups.reduce((sum, group) => sum + CONTACTS.filter((c) => c.groups?.includes(group)).length, 0)
+
+    createCampaignRecord({
+      name: subject.trim() || `${action} - ${new Date().toLocaleDateString()}`,
+      templateId: templateId || null,
+      recipients: recipientCount,
+      scheduledAt: isScheduled ? `${scheduleDate} ${scheduleTime}` : null,
+      message: body,
+      status: isScheduled ? 'scheduled' : 'sent',
+    })
+
+    setFeedback({
+      type: 'success',
+      message: isScheduled
+        ? `Campaign scheduled for ${scheduleDate} ${scheduleTime}. It now appears in Campaigns.`
+        : `Message recorded as sent (${recipientCount} recipients). Nothing was delivered to WhatsApp.`,
+    })
     setBody('')
     setSubject('')
     setSelectedContacts([])
@@ -69,7 +90,7 @@ export default function ComposePage() {
     setStep(1)
   }
 
-  const allGroups = [...new Set(DEMO_CONTACTS.flatMap((c) => c.groups || []))]
+  const allGroups = [...new Set(CONTACTS.flatMap((c) => c.groups || []))]
 
   return (
     <div className="page">
@@ -80,6 +101,18 @@ export default function ComposePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
+          {feedback && (
+            <div
+              className={`px-4 py-3 rounded-md border text-sm ${
+                feedback.type === 'error'
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+                  : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
+              }`}
+              role="status"
+            >
+              {feedback.message}
+            </div>
+          )}
           <Card title="Message Type">
             <Tabs
               tabs={[
@@ -182,7 +215,7 @@ export default function ComposePage() {
                     />
                     <span className="font-medium text-gray-900 dark:text-gray-100">{group}</span>
                     <Badge variant="info" className="ml-auto">
-                      {DEMO_CONTACTS.filter((c) => c.groups?.includes(group)).length} contacts
+                      {CONTACTS.filter((c) => c.groups?.includes(group)).length} contacts
                     </Badge>
                   </label>
                 ))}
@@ -287,7 +320,7 @@ export default function ComposePage() {
           <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
             <p className="text-sm text-amber-800 dark:text-amber-400">
               <Icon name="Info" size={16} className="inline mr-1" />
-              Demo Mode: Messages are simulated and not actually sent.
+              Simulation: messages are simulated and not actually sent.
             </p>
           </div>
         </div>

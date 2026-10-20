@@ -1,70 +1,75 @@
-﻿import { useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { Button, Card, Badge, Icon, Input, Drawer } from '../../components/index.js'
+import {
+  getAgents,
+  saveAgents,
+  getAgentTests,
+  saveAgentTests,
+  recordAgentTest,
+  clearAgentTests,
+  simulateAgentReply,
+} from '../../services/aiAgentService.js'
 
-const DEMO_AGENTS = [
-  {
-    id: 1,
-    name: 'Support Assistant',
-    description: 'Handles customer support queries',
-    status: 'Active',
-    instructions: 'You are a helpful customer support assistant. Be polite, clear, and concise.',
-    tone: 'Professional',
-    knowledge: ['Product information', 'Pricing details', 'Return policy'],
-    tools: ['Search knowledge base', 'Handoff to human'],
-    handoffThreshold: 0.7,
-    updatedAt: '2026-01-10',
-  },
-  {
-    id: 2,
-    name: 'Sales Bot',
-    description: 'Assists with product recommendations',
-    status: 'Draft',
-    instructions: 'You are a sales assistant. Help customers find the right products.',
-    tone: 'Friendly',
-    knowledge: ['Product catalog', 'Discount offers'],
-    tools: ['Product search', 'Send recommendations'],
-    handoffThreshold: 0.5,
-    updatedAt: '2026-01-12',
-  },
-]
+const EMPTY_FORM = {
+  name: '',
+  description: '',
+  instructions: '',
+  tone: 'Professional',
+  welcomeMessage: '',
+  fallback: '',
+  businessHours: 'Mon-Fri 09:00-18:00',
+  available: true,
+  responseDelay: 700,
+  tools: '',
+  handoffThreshold: 0.7,
+}
+
+const CATEGORIES = ['Product', 'Pricing', 'Policy', 'FAQ', 'Shipping', 'Other']
 
 export default function AIAgentPage() {
-  const [agents, setAgents] = useState(DEMO_AGENTS)
+  const [agents, setAgents] = useState(() => getAgents())
   const [selectedAgent, setSelectedAgent] = useState(null)
   const [showDrawer, setShowDrawer] = useState(false)
   const [showPlayground, setShowPlayground] = useState(false)
   const [playgroundMessage, setPlaygroundMessage] = useState('')
   const [playgroundHistory, setPlaygroundHistory] = useState([])
-  const [form, setForm] = useState({
-    name: '',
-    description: '',
-    instructions: '',
-    tone: 'Professional',
-    knowledge: '',
-    tools: '',
-    handoffThreshold: 0.7,
-  })
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [knowledgeDraft, setKnowledgeDraft] = useState([])
+  const [formError, setFormError] = useState('')
   const [editingAgent, setEditingAgent] = useState(null)
+  const [tests, setTests] = useState(() => getAgentTests())
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('All')
+  const [notice, setNotice] = useState('')
 
-  const createAgent = () => {
-    if (!form.name.trim()) {
-      alert('Agent name is required')
-      return
-    }
-    const newAgent = {
-      id: Date.now(),
-      name: form.name,
-      description: form.description,
-      status: 'Draft',
-      instructions: form.instructions,
-      tone: form.tone,
-      knowledge: form.knowledge.split(',').map((k) => k.trim()).filter(Boolean),
-      tools: form.tools.split(',').map((t) => t.trim()).filter(Boolean),
-      handoffThreshold: Number(form.handoffThreshold),
-      updatedAt: new Date().toISOString().slice(0, 10),
-    }
-    setAgents((prev) => [...prev, newAgent])
-    setForm({ name: '', description: '', instructions: '', tone: 'Professional', knowledge: '', tools: '', handoffThreshold: 0.7 })
+  const persist = (next) => {
+    setAgents(next)
+    saveAgents(next)
+  }
+
+  const agentTests = useMemo(
+    () => tests.filter((t) => t.agentId === selectedAgent?.id),
+    [tests, selectedAgent]
+  )
+
+  const filteredAgents = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return agents.filter((agent) => {
+      const matchesStatus = statusFilter === 'All' || agent.status === statusFilter
+      const matchesQuery =
+        !query ||
+        agent.name.toLowerCase().includes(query) ||
+        (agent.description || '').toLowerCase().includes(query)
+      return matchesStatus && matchesQuery
+    })
+  }, [agents, search, statusFilter])
+
+  const openCreate = () => {
+    setEditingAgent(null)
+    setForm(EMPTY_FORM)
+    setKnowledgeDraft([])
+    setFormError('')
+    setShowDrawer(true)
   }
 
   const editAgent = (agent) => {
@@ -72,81 +77,167 @@ export default function AIAgentPage() {
     setForm({
       name: agent.name,
       description: agent.description,
-      instructions: agent.instructions,
-      tone: agent.tone,
-      knowledge: (agent.knowledge || []).join(', '),
+      instructions: agent.instructions || '',
+      tone: agent.tone || 'Professional',
+      welcomeMessage: agent.welcomeMessage || '',
+      fallback: agent.fallback || '',
+      businessHours: agent.businessHours || 'Mon-Fri 09:00-18:00',
+      available: agent.available !== false,
+      responseDelay: agent.responseDelay ?? 700,
       tools: (agent.tools || []).join(', '),
-      handoffThreshold: agent.handoffThreshold,
+      handoffThreshold: agent.handoffThreshold ?? 0.7,
     })
+    setKnowledgeDraft((agent.knowledge || []).map((k) => ({ ...k })))
+    setFormError('')
     setShowDrawer(true)
+  }
+
+  const addKnowledgeEntry = () => {
+    setKnowledgeDraft((prev) => [
+      ...prev,
+      { id: `k${prev.length + 1}-${prev.length}`, title: '', category: 'FAQ', text: '' },
+    ])
+  }
+
+  const updateKnowledgeEntry = (id, patch) => {
+    setKnowledgeDraft((prev) => prev.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)))
+  }
+
+  const removeKnowledgeEntry = (id) => {
+    setKnowledgeDraft((prev) => prev.filter((entry) => entry.id !== id))
   }
 
   const saveAgent = () => {
     if (!form.name.trim()) {
-      alert('Agent name is required')
+      setFormError('Agent name is required')
       return
     }
+    const cleaned = knowledgeDraft
+      .map((entry) => ({ ...entry, title: entry.title.trim(), text: entry.text.trim() }))
+      .filter((entry) => entry.title || entry.text)
+
+    if (cleaned.length !== knowledgeDraft.length) {
+      setFormError('Every knowledge entry needs a title and content')
+      return
+    }
+    const duplicate = cleaned.find(
+      (entry, index) => cleaned.findIndex((e) => e.title.toLowerCase() === entry.title.toLowerCase()) !== index
+    )
+    if (duplicate) {
+      setFormError(`Duplicate knowledge entry title: "${duplicate.title}"`)
+      return
+    }
+
     const agentData = {
-      ...form,
-      knowledge: form.knowledge.split(',').map((k) => k.trim()).filter(Boolean),
-      tools: form.tools.split(',').map((t) => t.trim()).filter(Boolean),
+      name: form.name.trim(),
+      description: form.description.trim(),
+      instructions: form.instructions.trim(),
+      tone: form.tone,
+      welcomeMessage: form.welcomeMessage.trim(),
+      fallback: form.fallback.trim(),
+      businessHours: form.businessHours.trim(),
+      available: form.available,
+      responseDelay: Number(form.responseDelay) || 700,
+      knowledge: cleaned,
+      tools: form.tools
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean),
       handoffThreshold: Number(form.handoffThreshold),
       updatedAt: new Date().toISOString().slice(0, 10),
     }
 
     if (editingAgent) {
-      setAgents((prev) => prev.map((a) => (a.id === editingAgent.id ? { ...a, ...agentData } : a)))
+      persist(agents.map((a) => (a.id === editingAgent.id ? { ...a, ...agentData } : a)))
+      setNotice(`Agent "${agentData.name}" updated`)
     } else {
-      setAgents((prev) => [...prev, { ...agentData, id: Date.now(), status: 'Draft' }])
+      const id = agents.reduce((max, a) => Math.max(max, Number(a.id) || 0), 0) + 1
+      persist([...agents, { ...agentData, id, status: 'Draft' }])
+      setNotice(`Agent "${agentData.name}" created as draft`)
     }
 
     setShowDrawer(false)
     setEditingAgent(null)
-    setForm({ name: '', description: '', instructions: '', tone: 'Professional', knowledge: '', tools: '', handoffThreshold: 0.7 })
+    setForm(EMPTY_FORM)
+    setKnowledgeDraft([])
   }
 
-  const activateAgent = (id) => {
-    setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'Active' } : a)))
+  const setStatus = (id, status) => {
+    persist(agents.map((a) => (a.id === id ? { ...a, status, updatedAt: new Date().toISOString().slice(0, 10) } : a)))
   }
 
-  const pauseAgent = (id) => {
-    setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'Paused' } : a)))
+  const duplicateAgent = (agent) => {
+    const id = agents.reduce((max, a) => Math.max(max, Number(a.id) || 0), 0) + 1
+    const copy = {
+      ...agent,
+      id,
+      name: `${agent.name} (copy)`,
+      status: 'Draft',
+      knowledge: (agent.knowledge || []).map((k, i) => ({ ...k, id: `${k.id}-c${i}` })),
+      updatedAt: new Date().toISOString().slice(0, 10),
+    }
+    persist([...agents, copy])
+    setNotice(`Duplicated "${agent.name}"`)
   }
 
   const deleteAgent = (id) => {
     if (!confirm('Delete this AI agent?')) return
-    setAgents((prev) => prev.filter((a) => a.id !== id))
+    persist(agents.filter((a) => a.id !== id))
+    const remaining = getAgentTests().filter((t) => t.agentId !== id)
+    saveAgentTests(remaining)
+    setTests(remaining)
+    setNotice('Agent deleted')
   }
 
   const openPlayground = (agent) => {
     setSelectedAgent(agent)
-    setPlaygroundHistory([])
+    setPlaygroundHistory(
+      agent.welcomeMessage
+        ? [{ role: 'assistant', text: agent.welcomeMessage, time: new Date().toLocaleTimeString(), matched: [] }]
+        : []
+    )
     setPlaygroundMessage('')
     setShowPlayground(true)
   }
 
   const sendPlaygroundMessage = () => {
-    if (!playgroundMessage.trim()) return
+    const message = playgroundMessage.trim()
+    if (!message || !selectedAgent) return
 
-    const userMessage = { role: 'user', text: playgroundMessage, time: new Date().toLocaleTimeString() }
-    setPlaygroundHistory((prev) => [...prev, userMessage])
-
-    setTimeout(() => {
-      const responses = [
-        'I understand your question. Let me help you with that.',
-        'Based on my knowledge base, here\'s what I found...',
-        'I can assist you with that. Here are some options.',
-        'That\'s a great question! Let me provide some information.',
-      ]
-      const aiResponse = {
-        role: 'assistant',
-        text: responses[Math.floor(Math.random() * responses.length)],
-        time: new Date().toLocaleTimeString(),
-      }
-      setPlaygroundHistory((prev) => [...prev, aiResponse])
-    }, 1000)
-
+    const time = new Date().toLocaleTimeString()
+    setPlaygroundHistory((prev) => [...prev, { role: 'user', text: message, time, matched: [] }])
     setPlaygroundMessage('')
+
+    const result = simulateAgentReply(selectedAgent, message)
+    setTimeout(() => {
+      setPlaygroundHistory((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          text: result.text,
+          time: new Date().toLocaleTimeString(),
+          matched: result.matched.map((m) => m.title),
+          handoff: result.handoff,
+        },
+      ])
+      const next = recordAgentTest({
+        agentId: selectedAgent.id,
+        agentName: selectedAgent.name,
+        message,
+        response: result.text,
+        matched: result.matched.map((m) => m.title),
+        handoff: result.handoff,
+        reason: result.reason,
+      })
+      setTests(next)
+    }, selectedAgent.responseDelay ?? 700)
+  }
+
+  const clearHistory = () => {
+    if (!selectedAgent) return
+    const next = clearAgentTests(selectedAgent.id)
+    setTests(next)
+    setPlaygroundHistory([])
   }
 
   return (
@@ -156,65 +247,120 @@ export default function AIAgentPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">AI Agent</h1>
           <p className="text-gray-600 dark:text-gray-400">Configure AI-powered agents for automated conversations</p>
         </div>
-        <Button variant="primary" onClick={() => { setEditingAgent(null); setForm({ name: '', description: '', instructions: '', tone: 'Professional', knowledge: '', tools: '', handoffThreshold: 0.7 }); setShowDrawer(true) }}>
+        <Button variant="primary" onClick={openCreate}>
           <Icon name="Plus" size={16} />
           Create Agent
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {agents.map((agent) => (
-          <Card key={agent.id} className="hover:shadow-md transition-shadow">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">{agent.name}</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{agent.description}</p>
-              </div>
-              <Badge variant={agent.status === 'Active' ? 'success' : agent.status === 'Paused' ? 'warning' : 'info'}>{agent.status}</Badge>
-            </div>
-            <div className="space-y-2 mb-4">
-              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                <Icon name="MessageSquare" size={14} />
-                <span>Tone: {agent.tone}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                <Icon name="Book" size={14} />
-                <span>{(agent.knowledge || []).length} knowledge entries</span>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="secondary" size="sm" className="flex-1" onClick={() => editAgent(agent)}>
-                <Icon name="Edit" size={14} />
-                Edit
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => openPlayground(agent)}>
-                <Icon name="Play" size={14} />
-                Test
-              </Button>
-              {agent.status === 'Active' ? (
-                <Button variant="secondary" size="sm" onClick={() => pauseAgent(agent.id)}>
-                  <Icon name="Pause" size={14} />
-                </Button>
-              ) : (
-                <Button variant="secondary" size="sm" onClick={() => activateAgent(agent.id)}>
-                  <Icon name="Play" size={14} />
-                </Button>
-              )}
-              <Button variant="danger" size="sm" onClick={() => deleteAgent(agent.id)}>
-                <Icon name="Trash2" size={14} />
-              </Button>
-            </div>
-          </Card>
-        ))}
+      {notice && (
+        <div className="mb-4 flex items-center justify-between rounded-md border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-700 dark:border-brand-800 dark:bg-brand-900/20 dark:text-brand-300">
+          <span>{notice}</span>
+          <button className="text-xs underline" onClick={() => setNotice('')}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Input
+          label="Search agents"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Name or description"
+          className="max-w-xs"
+        />
+        <div className="flex items-center gap-2">
+          {['All', 'Active', 'Draft', 'Paused'].map((status) => (
+            <Button
+              key={status}
+              variant={statusFilter === status ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setStatusFilter(status)}
+            >
+              {status}
+            </Button>
+          ))}
+        </div>
       </div>
+
+      {filteredAgents.length === 0 ? (
+        <Card>
+          <p className="text-sm text-gray-500 dark:text-gray-400">No agents match the current filters.</p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredAgents.map((agent) => (
+            <Card key={agent.id} className="hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">{agent.name}</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{agent.description}</p>
+                </div>
+                <Badge variant={agent.status === 'Active' ? 'success' : agent.status === 'Paused' ? 'warning' : 'info'}>
+                  {agent.status}
+                </Badge>
+              </div>
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                  <Icon name="MessageSquare" size={14} />
+                  <span>Tone: {agent.tone}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                  <Icon name="Book" size={14} />
+                  <span>{(agent.knowledge || []).length} knowledge entries</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                  <Icon name="Clock" size={14} />
+                  <span>{agent.businessHours || 'No business hours set'}</span>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" size="sm" className="flex-1" onClick={() => editAgent(agent)}>
+                  <Icon name="Edit" size={14} />
+                  Edit
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => openPlayground(agent)}>
+                  <Icon name="Play" size={14} />
+                  Test
+                </Button>
+                {agent.status === 'Active' ? (
+                  <Button variant="secondary" size="sm" onClick={() => setStatus(agent.id, 'Paused')}>
+                    <Icon name="Pause" size={14} />
+                  </Button>
+                ) : (
+                  <Button variant="secondary" size="sm" onClick={() => setStatus(agent.id, 'Active')}>
+                    <Icon name="Play" size={14} />
+                  </Button>
+                )}
+                <Button variant="secondary" size="sm" onClick={() => duplicateAgent(agent)}>
+                  <Icon name="Copy" size={14} />
+                </Button>
+                <Button variant="danger" size="sm" onClick={() => deleteAgent(agent.id)}>
+                  <Icon name="Trash2" size={14} />
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <Drawer
         isOpen={showDrawer}
-        onClose={() => { setShowDrawer(false); setEditingAgent(null) }}
+        onClose={() => {
+          setShowDrawer(false)
+          setEditingAgent(null)
+        }}
         title={editingAgent ? 'Edit AI Agent' : 'Create AI Agent'}
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setShowDrawer(false); setEditingAgent(null) }}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowDrawer(false)
+                setEditingAgent(null)
+              }}
+            >
               Cancel
             </Button>
             <Button variant="primary" onClick={saveAgent}>
@@ -224,7 +370,15 @@ export default function AIAgentPage() {
         }
       >
         <div className="space-y-4">
-          <Input label="Agent Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Input
+            label="Agent Name"
+            value={form.name}
+            onChange={(e) => {
+              setForm({ ...form, name: e.target.value })
+              setFormError('')
+            }}
+            error={formError}
+          />
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
             <textarea
@@ -257,10 +411,106 @@ export default function AIAgentPage() {
               <option value="Formal">Formal</option>
             </select>
           </div>
-          <Input label="Knowledge Base (comma-separated)" value={form.knowledge} onChange={(e) => setForm({ ...form, knowledge: e.target.value })} placeholder="Product info, Pricing, FAQ" />
-          <Input label="Available Tools (comma-separated)" value={form.tools} onChange={(e) => setForm({ ...form, tools: e.target.value })} placeholder="Search, Handoff, Database" />
+          <Input
+            label="Welcome Message"
+            value={form.welcomeMessage}
+            onChange={(e) => setForm({ ...form, welcomeMessage: e.target.value })}
+            placeholder="Message sent when the conversation starts"
+          />
+          <Input
+            label="Fallback Response"
+            value={form.fallback}
+            onChange={(e) => setForm({ ...form, fallback: e.target.value })}
+            placeholder="Used when no knowledge entry matches"
+          />
+          <Input
+            label="Business Hours"
+            value={form.businessHours}
+            onChange={(e) => setForm({ ...form, businessHours: e.target.value })}
+            placeholder="Mon-Fri 09:00-18:00"
+          />
+          <div className="flex items-center gap-2">
+            <input
+              id="agent-available"
+              type="checkbox"
+              checked={form.available}
+              onChange={(e) => setForm({ ...form, available: e.target.checked })}
+            />
+            <label htmlFor="agent-available" className="text-sm text-gray-700 dark:text-gray-300">
+              Agent accepts conversations
+            </label>
+          </div>
+          <Input
+            label="Response Delay (ms)"
+            type="number"
+            min="0"
+            max="5000"
+            step="100"
+            value={form.responseDelay}
+            onChange={(e) => setForm({ ...form, responseDelay: e.target.value })}
+          />
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Human Handoff Threshold (0-1)</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Knowledge Base ({knowledgeDraft.length})
+              </label>
+              <Button variant="secondary" size="sm" onClick={addKnowledgeEntry}>
+                <Icon name="Plus" size={14} />
+                Add entry
+              </Button>
+            </div>
+            {knowledgeDraft.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No knowledge entries yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {knowledgeDraft.map((entry) => (
+                  <div key={entry.id} className="rounded-md border border-gray-200 p-3 dark:border-gray-700">
+                    <div className="flex gap-2">
+                      <input
+                        value={entry.title}
+                        onChange={(e) => updateKnowledgeEntry(entry.id, { title: e.target.value })}
+                        placeholder="Title"
+                        className="flex-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+                      />
+                      <select
+                        value={entry.category}
+                        onChange={(e) => updateKnowledgeEntry(entry.id, { category: e.target.value })}
+                        className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+                      >
+                        {CATEGORIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                      <Button variant="danger" size="sm" onClick={() => removeKnowledgeEntry(entry.id)}>
+                        <Icon name="Trash2" size={14} />
+                      </Button>
+                    </div>
+                    <textarea
+                      value={entry.text}
+                      onChange={(e) => updateKnowledgeEntry(entry.id, { text: e.target.value })}
+                      rows={2}
+                      placeholder="Knowledge content used to answer questions"
+                      className="mt-2 w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <Input
+            label="Available Tools (comma-separated)"
+            value={form.tools}
+            onChange={(e) => setForm({ ...form, tools: e.target.value })}
+            placeholder="Search, Handoff, Database"
+          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Human Handoff Threshold (0-1)
+            </label>
             <input
               type="number"
               min="0"
@@ -270,25 +520,43 @@ export default function AIAgentPage() {
               onChange={(e) => setForm({ ...form, handoffThreshold: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              When the confidence of a knowledge match is below this value the agent escalates to a human.
+            </p>
           </div>
         </div>
       </Drawer>
 
       <Drawer
         isOpen={showPlayground}
-        onClose={() => { setShowPlayground(false); setSelectedAgent(null) }}
+        onClose={() => {
+          setShowPlayground(false)
+          setSelectedAgent(null)
+        }}
         title={`Test Playground: ${selectedAgent?.name}`}
         footer={
-          <Button variant="secondary" onClick={() => { setShowPlayground(false); setSelectedAgent(null) }}>
-            Close
-          </Button>
+          <div className="flex w-full gap-2">
+            <Button variant="secondary" className="flex-1" onClick={clearHistory}>
+              Clear history
+            </Button>
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => {
+                setShowPlayground(false)
+                setSelectedAgent(null)
+              }}
+            >
+              Close
+            </Button>
+          </div>
         }
       >
         <div className="space-y-4">
           <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded">
             <p className="text-sm text-blue-800 dark:text-blue-400">
               <Icon name="Info" size={16} className="inline mr-1" />
-              Demo Mode: AI responses are simulated. No actual AI model is running.
+              Simulation: replies are matched locally against this agent&apos;s knowledge base. No AI model is running.
             </p>
           </div>
 
@@ -298,8 +566,18 @@ export default function AIAgentPage() {
             )}
             {playgroundHistory.map((msg, index) => (
               <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`rounded-lg p-3 max-w-[80%] ${msg.role === 'user' ? 'bg-brand-500 text-white' : 'bg-white dark:bg-gray-700'}`}>
+                <div
+                  className={`rounded-lg p-3 max-w-[80%] ${
+                    msg.role === 'user' ? 'bg-brand-100 text-brand-900 dark:bg-brand-900/40 dark:text-brand-100' : 'bg-white dark:bg-gray-700'
+                  }`}
+                >
                   <p className="text-sm">{msg.text}</p>
+                  {msg.matched && msg.matched.length > 0 && (
+                    <p className="text-xs mt-1 opacity-70">Matched: {msg.matched.join(', ')}</p>
+                  )}
+                  {msg.handoff && (
+                    <p className="text-xs mt-1 opacity-70">Escalated to human agent</p>
+                  )}
                   <p className="text-xs mt-1 opacity-70">{msg.time}</p>
                 </div>
               </div>
@@ -318,6 +596,33 @@ export default function AIAgentPage() {
             <Button variant="primary" size="sm" onClick={sendPlaygroundMessage}>
               Send
             </Button>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Test history ({agentTests.length})
+              </h4>
+            </div>
+            {agentTests.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No tests recorded for this agent yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {agentTests
+                  .slice()
+                  .reverse()
+                  .map((test) => (
+                    <div key={test.id} className="rounded-md border border-gray-200 p-2 text-sm dark:border-gray-700">
+                      <p className="font-medium text-gray-800 dark:text-gray-200">{test.message}</p>
+                      <p className="text-gray-600 dark:text-gray-400">{test.response}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                        {new Date(test.createdAt).toLocaleString()} · {test.reason}
+                        {test.matched?.length ? ` · matched: ${test.matched.join(', ')}` : ''}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         </div>
       </Drawer>

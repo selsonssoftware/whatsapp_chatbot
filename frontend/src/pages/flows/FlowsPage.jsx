@@ -1,27 +1,14 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Button, Card, Badge, Icon, Input, Drawer, Tabs } from '../../components/index.js'
+import {
+  getFlows,
+  saveFlows,
+  getFlowSubmissions,
+  validateFlowDefinition,
+  validateSubmission,
+  submitFlow,
+} from '../../services/flowsService.js'
 
-const DEMO_FLOWS = [
-  {
-    id: 1,
-    name: 'Product Feedback',
-    description: 'Collect customer feedback on products',
-    status: 'Published',
-    screens: [
-      { id: 's1', name: 'Welcome', fields: [{ type: 'text', label: 'Your Name', key: 'name' }] },
-      { id: 's2', name: 'Rating', fields: [{ type: 'radio', label: 'Rating', key: 'rating', options: ['1', '2', '3', '4', '5'] }] },
-    ],
-    updatedAt: '2026-01-10',
-  },
-  {
-    id: 2,
-    name: 'Order Status',
-    description: 'Check order status',
-    status: 'Draft',
-    screens: [{ id: 's1', name: 'Order ID', fields: [{ type: 'text', label: 'Order ID', key: 'orderId' }] }],
-    updatedAt: '2026-01-12',
-  },
-]
 
 const FIELD_TYPES = [
   { type: 'text', label: 'Text Input' },
@@ -33,46 +20,72 @@ const FIELD_TYPES = [
 ]
 
 export default function FlowsPage() {
-  const [flows, setFlows] = useState(DEMO_FLOWS)
+  const [flows, setFlows] = useState(() => getFlows())
   const [selectedFlow, setSelectedFlow] = useState(null)
   const [showEditor, setShowEditor] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [selectedScreen, setSelectedScreen] = useState(null)
   const [previewData, setPreviewData] = useState({})
   const [form, setForm] = useState({ name: '', description: '' })
-  const [editingFlow, setEditingFlow] = useState(null)
   const [fieldCounter, setFieldCounter] = useState(0)
+  const [screenCounter, setScreenCounter] = useState(0)
+  const [formError, setFormError] = useState('')
+  const [validationErrors, setValidationErrors] = useState([])
+  const [previewErrors, setPreviewErrors] = useState({})
+  const [submissions, setSubmissions] = useState(() => getFlowSubmissions())
+  const [notice, setNotice] = useState('')
+
+  const updateFlows = (updater) => {
+    setFlows((prev) => {
+      const next = updater(prev)
+      saveFlows(next)
+      return next
+    })
+  }
 
   const createFlow = () => {
     if (!form.name.trim()) {
-      alert('Flow name is required')
+      setFormError('Flow name is required')
       return
     }
+    setFormError('')
     const newFlow = {
-      id: Date.now(),
+      id: flows.reduce((max, f) => Math.max(max, f.id), 0) + 1,
       name: form.name,
       description: form.description,
       status: 'Draft',
       screens: [{ id: 's1', name: 'Screen 1', fields: [] }],
       updatedAt: new Date().toISOString().slice(0, 10),
     }
-    setFlows((prev) => [...prev, newFlow])
+    updateFlows((prev) => [...prev, newFlow])
     setForm({ name: '', description: '' })
   }
 
   const editFlow = (flow) => {
     setSelectedFlow(flow)
     setSelectedScreen(flow.screens[0])
+    setFieldCounter(
+      flow.screens.reduce(
+        (max, s) => s.fields.reduce((m, f) => Math.max(m, parseInt(String(f.id).replace(/^f/, ''), 10) || 0), max),
+        0
+      )
+    )
+    setScreenCounter(
+      flow.screens.reduce((max, s) => Math.max(max, parseInt(String(s.id).replace(/^s/, ''), 10) || 0), 0)
+    )
+    setValidationErrors([])
     setShowEditor(true)
   }
 
   const addScreen = () => {
     if (!selectedFlow) return
-    const newScreen = { id: 's' + Date.now(), name: `Screen ${selectedFlow.screens.length + 1}`, fields: [] }
+    const nextIndex = screenCounter + 1
+    const newScreen = { id: 's' + nextIndex, name: `Screen ${nextIndex}`, fields: [] }
     const updatedFlow = { ...selectedFlow, screens: [...selectedFlow.screens, newScreen] }
     setSelectedFlow(updatedFlow)
-    setFlows((prev) => prev.map((f) => (f.id === selectedFlow.id ? updatedFlow : f)))
+    updateFlows((prev) => prev.map((f) => (f.id === selectedFlow.id ? updatedFlow : f)))
     setSelectedScreen(newScreen)
+    setScreenCounter(nextIndex)
   }
 
   const addField = (type) => {
@@ -82,7 +95,7 @@ export default function FlowsPage() {
     setSelectedScreen(updatedScreen)
     const updatedFlow = { ...selectedFlow, screens: selectedFlow.screens.map((s) => (s.id === selectedScreen.id ? updatedScreen : s)) }
     setSelectedFlow(updatedFlow)
-    setFlows((prev) => prev.map((f) => (f.id === selectedFlow.id ? updatedFlow : f)))
+    updateFlows((prev) => prev.map((f) => (f.id === selectedFlow.id ? updatedFlow : f)))
     setFieldCounter((prev) => prev + 1)
   }
 
@@ -93,7 +106,7 @@ export default function FlowsPage() {
     setSelectedScreen(updatedScreen)
     const updatedFlow = { ...selectedFlow, screens: selectedFlow.screens.map((s) => (s.id === selectedScreen.id ? updatedScreen : s)) }
     setSelectedFlow(updatedFlow)
-    setFlows((prev) => prev.map((f) => (f.id === selectedFlow.id ? updatedFlow : f)))
+    updateFlows((prev) => prev.map((f) => (f.id === selectedFlow.id ? updatedFlow : f)))
   }
 
   const removeField = (fieldId) => {
@@ -103,28 +116,75 @@ export default function FlowsPage() {
     setSelectedScreen(updatedScreen)
     const updatedFlow = { ...selectedFlow, screens: selectedFlow.screens.map((s) => (s.id === selectedScreen.id ? updatedScreen : s)) }
     setSelectedFlow(updatedFlow)
-    setFlows((prev) => prev.map((f) => (f.id === selectedFlow.id ? updatedFlow : f)))
+    updateFlows((prev) => prev.map((f) => (f.id === selectedFlow.id ? updatedFlow : f)))
   }
 
   const saveFlow = () => {
     if (!selectedFlow) return
-    setFlows((prev) => prev.map((f) => (f.id === selectedFlow.id ? { ...selectedFlow, updatedAt: new Date().toISOString().slice(0, 10) } : f)))
+    updateFlows((prev) => prev.map((f) => (f.id === selectedFlow.id ? { ...selectedFlow, updatedAt: new Date().toISOString().slice(0, 10) } : f)))
     setShowEditor(false)
     setSelectedFlow(null)
   }
 
   const publishFlow = (id) => {
-    if (!confirm('Publish this flow? Note: This is a demo - no actual publication will occur.')) return
-    setFlows((prev) => prev.map((f) => (f.id === id ? { ...f, status: 'Published' } : f)))
+    const flow = flows.find((f) => f.id === id)
+    const errors = validateFlowDefinition(flow)
+    if (errors.length) {
+      setValidationErrors(errors)
+      return
+    }
+    if (!confirm('Publish this flow? Note: no actual publication will occur.')) return
+    setValidationErrors([])
+    updateFlows((prev) => prev.map((f) => (f.id === id ? { ...f, status: 'Published' } : f)))
+  }
+
+  const pauseFlow = (id) => {
+    updateFlows((prev) => prev.map((f) => (f.id === id ? { ...f, status: 'Paused' } : f)))
+  }
+
+  const duplicateFlow = (flow) => {
+    const copy = {
+      ...flow,
+      id: flows.reduce((max, f) => Math.max(max, f.id), 0) + 1,
+      name: `${flow.name} (Copy)`,
+      status: 'Draft',
+      screens: flow.screens.map((s, index) => ({
+        ...s,
+        id: `${s.id}-copy-${index}`,
+        fields: s.fields.map((f, fIndex) => ({ ...f, id: `${f.id}-copy-${fIndex}` })),
+      })),
+      updatedAt: new Date().toISOString().slice(0, 10),
+    }
+    updateFlows((prev) => [...prev, copy])
   }
 
   const deleteFlow = (id) => {
     if (!confirm('Delete this flow?')) return
-    setFlows((prev) => prev.filter((f) => f.id !== id))
+    updateFlows((prev) => prev.filter((f) => f.id !== id))
+  }
+
+  const setPreviewValue = (key, value) => {
+    setPreviewData((prev) => ({ ...prev, [key]: value }))
+    setPreviewErrors((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
   }
 
   const handlePreviewSubmit = () => {
-    alert('Form submitted (demo)\nData: ' + JSON.stringify(previewData, null, 2))
+    if (!selectedFlow) return
+    const errors = validateSubmission(selectedFlow, previewData)
+    setPreviewErrors(errors)
+    if (Object.keys(errors).length > 0) {
+      setNotice('Please correct the highlighted fields before submitting.')
+      return
+    }
+    const record = submitFlow(selectedFlow, previewData)
+    setSubmissions(getFlowSubmissions())
+    setNotice(`Submission #${record.id} saved locally. Nothing was sent to WhatsApp.`)
+    setPreviewData({})
   }
 
   return (
@@ -134,11 +194,28 @@ export default function FlowsPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">WhatsApp Flows</h1>
           <p className="text-gray-600 dark:text-gray-400">Create interactive flows for WhatsApp messaging</p>
         </div>
-        <Button variant="primary" onClick={() => { setForm({ name: '', description: '' }); setEditingFlow(null); setShowEditor(true) }}>
+        <Button variant="primary" onClick={() => { setForm({ name: '', description: '' }); setShowEditor(true) }}>
           <Icon name="Plus" size={16} />
           Create Flow
         </Button>
       </div>
+
+      {validationErrors.length > 0 && (
+        <div className="mb-4 px-4 py-3 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-sm text-amber-800 dark:text-amber-300">
+          <p className="font-medium mb-1">Fix these issues before publishing:</p>
+          <ul className="list-disc pl-5 space-y-0.5">
+            {validationErrors.map((err) => (
+              <li key={err}>{err}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {notice && (
+        <div className="mb-4 px-4 py-3 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-sm text-blue-800 dark:text-blue-300" role="status">
+          {notice}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {flows.map((flow) => (
@@ -159,22 +236,61 @@ export default function FlowsPage() {
                 <Icon name="Edit" size={14} />
                 Edit
               </Button>
-              <Button variant="secondary" size="sm" onClick={() => { setSelectedFlow(flow); setShowPreview(true) }}>
+              <Button variant="secondary" size="sm" onClick={() => { setSelectedFlow(flow); setPreviewData({}); setPreviewErrors({}); setShowPreview(true) }}>
                 <Icon name="Eye" size={14} />
                 Preview
               </Button>
               {flow.status === 'Draft' && (
-                <Button variant="secondary" size="sm" onClick={() => publishFlow(flow.id)}>
+                <Button variant="secondary" size="sm" onClick={() => publishFlow(flow.id)} title="Publish flow">
                   <Icon name="Upload" size={14} />
                 </Button>
               )}
-              <Button variant="danger" size="sm" onClick={() => deleteFlow(flow.id)}>
+              {flow.status === 'Published' && (
+                <Button variant="secondary" size="sm" onClick={() => pauseFlow(flow.id)} aria-label="Pause flow">
+                  <Icon name="Pause" size={14} />
+                </Button>
+              )}
+              <Button variant="secondary" size="sm" onClick={() => duplicateFlow(flow)} aria-label="Duplicate flow">
+                <Icon name="Copy" size={14} />
+              </Button>
+              <Button variant="danger" size="sm" onClick={() => deleteFlow(flow.id)} aria-label="Delete flow">
                 <Icon name="Trash2" size={14} />
               </Button>
             </div>
           </Card>
         ))}
       </div>
+
+      <Card title={`Submissions (${submissions.length})`} className="mt-6">
+        {submissions.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            No submissions yet. Use the Preview action on a flow and submit the form to record a local submission.
+          </p>
+        ) : (
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Flow</th>
+                  <th>Data</th>
+                  <th>Submitted</th>
+                </tr>
+              </thead>
+              <tbody>
+                {submissions.map((s) => (
+                  <tr key={s.id}>
+                    <td className="font-medium">#{s.id}</td>
+                    <td>{s.flowName}</td>
+                    <td className="text-xs text-gray-600 dark:text-gray-400">{JSON.stringify(s.data)}</td>
+                    <td>{new Date(s.submittedAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <Drawer
         isOpen={showEditor}
@@ -298,7 +414,15 @@ export default function FlowsPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            <Input label="Flow Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <Input
+              label="Flow Name"
+              value={form.name}
+              onChange={(e) => {
+                setForm({ ...form, name: e.target.value })
+                setFormError('')
+              }}
+              error={formError}
+            />
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
               <textarea
@@ -314,10 +438,10 @@ export default function FlowsPage() {
 
       <Drawer
         isOpen={showPreview}
-        onClose={() => { setShowPreview(false); setSelectedFlow(null); setPreviewData({}) }}
+        onClose={() => { setShowPreview(false); setSelectedFlow(null); setPreviewData({}); setPreviewErrors({}) }}
         title={`Preview: ${selectedFlow?.name}`}
         footer={
-          <Button variant="secondary" onClick={() => { setShowPreview(false); setSelectedFlow(null); setPreviewData({}) }}>
+          <Button variant="secondary" onClick={() => { setShowPreview(false); setSelectedFlow(null); setPreviewData({}); setPreviewErrors({}) }}>
             Close
           </Button>
         }
@@ -327,7 +451,7 @@ export default function FlowsPage() {
             <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded">
               <p className="text-sm text-blue-800 dark:text-blue-400">
                 <Icon name="Info" size={16} className="inline mr-1" />
-                Demo Mode: This is a preview of how the flow will appear on WhatsApp.
+                Preview: this is how the flow will appear on WhatsApp.
               </p>
             </div>
 
@@ -341,19 +465,22 @@ export default function FlowsPage() {
                   <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{screen.name}</p>
                   {screen.fields.map((field) => (
                     <div key={field.id}>
-                      <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">{field.label}</label>
+                      <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                        {field.label}
+                        {field.required && <span className="text-red-500"> *</span>}
+                      </label>
                       {field.type === 'text' && (
                         <input
                           type="text"
                           value={previewData[field.key] || ''}
-                          onChange={(e) => setPreviewData({ ...previewData, [field.key]: e.target.value })}
+                          onChange={(e) => setPreviewValue(field.key, e.target.value)}
                           className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800"
                         />
                       )}
                       {field.type === 'textarea' && (
                         <textarea
                           value={previewData[field.key] || ''}
-                          onChange={(e) => setPreviewData({ ...previewData, [field.key]: e.target.value })}
+                          onChange={(e) => setPreviewValue(field.key, e.target.value)}
                           rows={2}
                           className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800"
                         />
@@ -366,7 +493,7 @@ export default function FlowsPage() {
                                 type="radio"
                                 name={field.key}
                                 checked={previewData[field.key] === opt}
-                                onChange={() => setPreviewData({ ...previewData, [field.key]: opt })}
+                                onChange={() => setPreviewValue(field.key, opt)}
                               />
                               {opt}
                             </label>
@@ -376,7 +503,7 @@ export default function FlowsPage() {
                       {field.type === 'dropdown' && (
                         <select
                           value={previewData[field.key] || ''}
-                          onChange={(e) => setPreviewData({ ...previewData, [field.key]: e.target.value })}
+                          onChange={(e) => setPreviewValue(field.key, e.target.value)}
                           className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800"
                         >
                           <option value="">Select...</option>
@@ -387,6 +514,7 @@ export default function FlowsPage() {
                           ))}
                         </select>
                       )}
+                      {previewErrors[field.key] && <p className="error mt-1">{previewErrors[field.key]}</p>}
                     </div>
                   ))}
                 </div>

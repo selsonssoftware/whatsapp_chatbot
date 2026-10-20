@@ -5,11 +5,11 @@ export const ROLES = {
   SUPPORT: 'Support',
 }
 
-export const DEMO_USERS = [
-  { id: 1, name: 'Ava Admin', email: 'admin@demo.com', role: ROLES.ADMIN },
-  { id: 2, name: 'Morgan Manager', email: 'manager@demo.com', role: ROLES.MANAGER },
-  { id: 3, name: 'Alex Agent', email: 'agent@demo.com', role: ROLES.AGENT },
-  { id: 4, name: 'Sam Support', email: 'support@demo.com', role: ROLES.SUPPORT },
+export const USERS = [
+  { id: 1, name: 'Ava Admin', email: 'admin@example.com', role: ROLES.ADMIN },
+  { id: 2, name: 'Morgan Manager', email: 'manager@example.com', role: ROLES.MANAGER },
+  { id: 3, name: 'Alex Agent', email: 'agent@example.com', role: ROLES.AGENT },
+  { id: 4, name: 'Sam Support', email: 'support@example.com', role: ROLES.SUPPORT },
 ]
 
 export const NAV_ITEMS = [

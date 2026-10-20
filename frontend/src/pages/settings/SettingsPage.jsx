@@ -1,31 +1,56 @@
 import { useState } from 'react'
 import { Card, Button, Input, Tabs, Icon, Badge } from '../../components/index.js'
+import { resetSeedData, getStoredSeedData } from '../../services/seedDataService.js'
+
+const DEFAULT_SETTINGS = {
+  general: { workspaceName: 'My Workspace', timezone: 'UTC', language: 'en' },
+  whatsapp: { phoneNumber: '', businessName: '', description: '' },
+  messaging: { defaultTemplate: '', autoReply: false, workingHours: '9:00-18:00' },
+  team: { requireApproval: false, maxConversations: 10 },
+  notifications: { emailAlerts: true, inAppAlerts: true },
+  security: { twoFactorAuth: false, sessionTimeout: 30 },
+  billing: { plan: 'Free', renewalDate: '2026-02-17' },
+  privacy: { dataRetention: 90, anonymizeData: false },
+}
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general')
-  const [settings, setSettings] = useState({
-    general: { workspaceName: 'My Workspace', timezone: 'UTC', language: 'en' },
-    whatsapp: { phoneNumber: '', businessName: '', description: '' },
-    messaging: { defaultTemplate: '', autoReply: false, workingHours: '9:00-18:00' },
-    team: { requireApproval: false, maxConversations: 10 },
-    notifications: { emailAlerts: true, inAppAlerts: true },
-    security: { twoFactorAuth: false, sessionTimeout: 30 },
-    billing: { plan: 'Free', renewalDate: '2026-02-17' },
-    privacy: { dataRetention: 90, anonymizeData: false },
+  const [settings, setSettings] = useState(() => {
+    try {
+      const raw = localStorage.getItem('wa_settings')
+      if (!raw) return DEFAULT_SETTINGS
+      const parsed = JSON.parse(raw)
+      return { ...DEFAULT_SETTINGS, ...parsed }
+    } catch {
+      return DEFAULT_SETTINGS
+    }
   })
-
   const [saveStatus, setSaveStatus] = useState('')
+  const [seedData, setSeedData] = useState(() => getStoredSeedData())
 
   const updateSetting = (section, key, value) => {
     setSettings((prev) => ({ ...prev, [section]: { ...prev[section], [key]: value } }))
   }
 
   const saveSettings = () => {
-    setSaveStatus('Saving...')
-    setTimeout(() => {
-      setSaveStatus('Saved!')
-      setTimeout(() => setSaveStatus(''), 2000)
-    }, 500)
+    try {
+      localStorage.setItem('wa_settings', JSON.stringify(settings))
+    } catch {
+      setSaveStatus('Could not save settings in this browser')
+      return
+    }
+    setSaveStatus('Saved!')
+    setTimeout(() => setSaveStatus(''), 2000)
+  }
+
+  const handleResetSeedData = () => {
+    if (!confirm('Reset all local data? Products, orders, payments, templates, chatbots, AI agents, flows and settings will return to their seeded values. This cannot be undone.'))
+      return
+    resetSeedData()
+    setSeedData(getStoredSeedData())
+    setSettings(DEFAULT_SETTINGS)
+    setSaveStatus('Local data reset to the seeded values. Reload the page to see them in every module.')
+    setTimeout(() => setSaveStatus(''), 4000)
   }
 
   return (
@@ -45,6 +70,7 @@ export default function SettingsPage() {
           { id: 'security', label: 'Security' },
           { id: 'billing', label: 'Billing' },
           { id: 'privacy', label: 'Data & Privacy' },
+          { id: 'data', label: 'Local Data' },
         ]}
         activeTab={activeTab}
         onChange={setActiveTab}
@@ -198,7 +224,15 @@ export default function SettingsPage() {
                 <label htmlFor="2fa" className="text-sm text-gray-700 dark:text-gray-300">Two-Factor Authentication</label>
               </div>
               <Input label="Session Timeout (minutes)" type="number" value={settings.security.sessionTimeout} onChange={(e) => updateSetting('security', 'sessionTimeout', e.target.value)} />
-              <Button variant="secondary">Change Password</Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setSaveStatus('Password changes are handled by the backend')
+                  setTimeout(() => setSaveStatus(''), 3000)
+                }}
+              >
+                Change Password (backend only)
+              </Button>
             </div>
           </Card>
         )}
@@ -213,12 +247,28 @@ export default function SettingsPage() {
                 </div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Renewal Date: {settings.billing.renewalDate}</p>
               </div>
-              <Button variant="primary">Upgrade Plan</Button>
-              <Button variant="secondary">View Payment History</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setSaveStatus('Plan upgrades are handled by the backend')
+                  setTimeout(() => setSaveStatus(''), 3000)
+                }}
+              >
+                Upgrade Plan (backend only)
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setSaveStatus('Payment history is provided by the backend')
+                  setTimeout(() => setSaveStatus(''), 3000)
+                }}
+              >
+                View Payment History (backend only)
+              </Button>
               <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded">
                 <p className="text-sm text-amber-800 dark:text-amber-400">
                   <Icon name="Info" size={16} className="inline mr-1" />
-                  Demo Mode: No actual billing or payment processing.
+                  Simulation: no actual billing or payment processing.
                 </p>
               </div>
             </div>
@@ -239,8 +289,58 @@ export default function SettingsPage() {
                 />
                 <label htmlFor="anonymize" className="text-sm text-gray-700 dark:text-gray-300">Anonymize Old Data</label>
               </div>
-              <Button variant="danger">Export All Data</Button>
-              <Button variant="danger">Delete Account</Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = 'settings.json'
+                  a.click()
+                  URL.revokeObjectURL(url)
+                  setSaveStatus('Settings exported (JSON)')
+                  setTimeout(() => setSaveStatus(''), 3000)
+                }}
+              >
+                Export Settings
+              </Button>
+              <Button variant="danger" disabled title="Account deletion is handled by the backend and is not available yet">
+                Delete Account (backend only)
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {activeTab === 'data' && (
+          <Card title="Local Data">
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                All records are stored in this browser&apos;s localStorage. They survive a page refresh and are never sent to a
+                server. Resetting restores the seeded values and keeps your session and theme preference.
+              </p>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Store</th>
+                      <th>Records</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {seedData.map((entry) => (
+                      <tr key={entry.key}>
+                        <td className="font-mono text-xs">{entry.key}</td>
+                        <td>{entry.records}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Button variant="danger" onClick={handleResetSeedData}>
+                <Icon name="Trash2" size={16} />
+                Reset Local Data
+              </Button>
             </div>
           </Card>
         )}

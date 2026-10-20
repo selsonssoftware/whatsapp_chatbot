@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Card, Button, Badge, SearchBar, Icon, Input, Drawer, Tabs } from '../../components/index.js'
-import { ROLES, DEMO_USERS } from '../../constants/roles.js'
+import { ROLES, USERS } from '../../constants/roles.js'
 
 export default function TeamPage() {
-  const [members, setMembers] = useState(DEMO_USERS)
+  const [members, setMembers] = useState(USERS)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [showDrawer, setShowDrawer] = useState(false)
@@ -63,7 +63,7 @@ export default function TeamPage() {
   const inviteMember = () => {
     const email = prompt('Enter email address to invite:')
     if (email) {
-      alert(`Demo: Invitation sent to ${email}`)
+      alert(`Invitation sent to ${email}`)
     }
   }
 

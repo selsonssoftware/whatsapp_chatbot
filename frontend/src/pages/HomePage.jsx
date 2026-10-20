@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { KPICard, Card, Badge, Button } from '../components/index.js'
 import { Icon } from '../components/index.js'
@@ -45,29 +45,81 @@ const dashboardData = {
 
 export default function HomePage() {
   const [dateRange, setDateRange] = useState('7d')
+  const [notice, setNotice] = useState('')
+
+  const rangeMultiplier = useMemo(() => ({ '7d': 1, '30d': 3.6, '90d': 9.2 }[dateRange] || 1), [dateRange])
+  const rangeLabel = useMemo(() => ({ '7d': 'Last 7 days', '30d': 'Last 30 days', '90d': 'Last 90 days' }[dateRange]), [dateRange])
+
+  const kpis = useMemo(() => {
+    return dashboardData.kpis.map((kpi) => {
+      if (kpi.value.includes('%')) {
+        return { ...kpi, value: `${(94.5 - (rangeMultiplier - 1) * 1.4).toFixed(1)}%` }
+      }
+      const numeric = Number(kpi.value.replace(/,/g, ''))
+      return { ...kpi, value: Math.round(numeric * rangeMultiplier).toLocaleString() }
+    })
+  }, [rangeMultiplier])
+
+  const performance = useMemo(() => {
+    return dashboardData.messagingPerformance.map((day) => ({
+      ...day,
+      sent: Math.round(day.sent * rangeMultiplier),
+      delivered: Math.round(day.delivered * rangeMultiplier),
+      read: Math.round(day.read * rangeMultiplier),
+    }))
+  }, [rangeMultiplier])
+
+  const exportReport = useCallback(() => {
+    const header = 'Metric,Value\n'
+    const rows = kpis.map((kpi) => `${kpi.title},${kpi.value}`).join('\n')
+    const blob = new Blob([header + rows + '\n'], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `dashboard-${dateRange}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+    setNotice(`Dashboard export downloaded (${rangeLabel}). No data left the browser.`)
+    setTimeout(() => setNotice(''), 4000)
+  }, [kpis, dateRange, rangeLabel])
 
   return (
     <div className="page">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Dashboard</h1>
+        <p className="text-gray-600 dark:text-gray-400">Overview of messaging performance, campaigns and team activity</p>
+      </div>
+
+      {notice && (
+        <div className="mb-4 rounded-md border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-700 dark:border-brand-800 dark:bg-brand-900/20 dark:text-brand-300">
+          {notice}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <label htmlFor="dashboard-range" className="text-sm text-gray-600 dark:text-gray-400">
+            Date range
+          </label>
           <select
+            id="dashboard-range"
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            className="w-44"
           >
             <option value="7d">Last 7 days</option>
             <option value="30d">Last 30 days</option>
             <option value="90d">Last 90 days</option>
           </select>
         </div>
-        <Button variant="primary" onClick={() => {}}>
+        <Button variant="primary" onClick={exportReport}>
           <Icon name="Download" size={16} />
           Export Report
         </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {dashboardData.kpis.map((kpi, index) => (
+        {kpis.map((kpi, index) => (
           <KPICard key={index} {...kpi} />
         ))}
       </div>
@@ -75,14 +127,14 @@ export default function HomePage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <Card title="Messaging Performance">
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={dashboardData.messagingPerformance}>
+            <LineChart data={performance}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip />
               <Legend />
-              <Line type="monotone" dataKey="sent" stroke="#25D366" name="Sent" />
-              <Line type="monotone" dataKey="delivered" stroke="#128C7E" name="Delivered" />
+              <Line type="monotone" dataKey="sent" stroke="#00C667" name="Sent" />
+              <Line type="monotone" dataKey="delivered" stroke="#007C72" name="Delivered" />
               <Line type="monotone" dataKey="read" stroke="#4ade80" name="Read" />
             </LineChart>
           </ResponsiveContainer>
@@ -95,7 +147,7 @@ export default function HomePage() {
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="value" fill="#25D366" />
+              <Bar dataKey="value" fill="#00C667" />
             </BarChart>
           </ResponsiveContainer>
         </Card>

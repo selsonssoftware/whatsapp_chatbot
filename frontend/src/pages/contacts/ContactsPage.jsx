@@ -1,9 +1,9 @@
-import { useState } from 'react'
-import { DEMO_CONTACTS } from '../../data/demoData.js'
+import { useState, useMemo, useCallback } from 'react'
+import { CONTACTS } from '../../data/seedData.js'
 import { Button, Card, Input, Badge, Tabs, SearchBar, Modal, Icon } from '../../components/index.js'
 
 export default function ContactsPage() {
-  const [contacts, setContacts] = useState(DEMO_CONTACTS)
+  const [contacts, setContacts] = useState(CONTACTS)
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingContact, setEditingContact] = useState(null)
@@ -11,24 +11,31 @@ export default function ContactsPage() {
   const [errors, setErrors] = useState({})
   const [activeTab, setActiveTab] = useState('contacts')
   const [selectedContacts, setSelectedContacts] = useState([])
+  const [tagFilter, setTagFilter] = useState('all')
+  const [groupFilter, setGroupFilter] = useState('all')
 
-  const filtered = contacts.filter((c) =>
-    (c.firstName + ' ' + c.lastName + ' ' + c.phone + ' ' + c.email).toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = useMemo(() => {
+    return contacts.filter((c) => {
+      const matchesSearch = (c.firstName + ' ' + c.lastName + ' ' + c.phone + ' ' + c.email).toLowerCase().includes(search.toLowerCase())
+      const matchesTag = tagFilter === 'all' || (c.tags || []).includes(tagFilter)
+      const matchesGroup = groupFilter === 'all' || (c.groups || []).includes(groupFilter)
+      return matchesSearch && matchesTag && matchesGroup
+    })
+  }, [contacts, search, tagFilter, groupFilter])
 
-  const allTags = [...new Set(contacts.flatMap((c) => c.tags || []))]
-  const allGroups = [...new Set(contacts.flatMap((c) => c.groups || []))]
+  const allTags = useMemo(() => [...new Set(contacts.flatMap((c) => c.tags || []))], [contacts])
+  const allGroups = useMemo(() => [...new Set(contacts.flatMap((c) => c.groups || []))], [contacts])
 
-  const validate = () => {
+  const validate = useCallback(() => {
     const e = {}
     if (!form.firstName) e.firstName = 'Required'
     if (!form.phone) e.phone = 'Required'
     else if (!/^\+?\d{7,15}$/.test(form.phone)) e.phone = 'Invalid phone format'
     setErrors(e)
     return Object.keys(e).length === 0
-  }
+  }, [form])
 
-  const save = () => {
+  const save = useCallback(() => {
     if (!validate()) return
     const contactData = {
       ...form,
@@ -48,9 +55,9 @@ export default function ContactsPage() {
     setEditingContact(null)
     setForm({ firstName: '', lastName: '', phone: '', email: '', company: '', tags: '', groups: '', notes: '' })
     setErrors({})
-  }
+  }, [form, editingContact, validate])
 
-  const edit = (contact) => {
+  const edit = useCallback((contact) => {
     setEditingContact(contact)
     setForm({
       firstName: contact.firstName,
@@ -63,20 +70,20 @@ export default function ContactsPage() {
       notes: contact.notes || '',
     })
     setShowForm(true)
-  }
+  }, [])
 
-  const remove = (id) => {
+  const remove = useCallback((id) => {
     if (!confirm('Delete this contact?')) return
     setContacts((prev) => prev.filter((c) => c.id !== id))
-  }
+  }, [])
 
-  const bulkDelete = () => {
+  const bulkDelete = useCallback(() => {
     if (!confirm(`Delete ${selectedContacts.length} selected contacts?`)) return
     setContacts((prev) => prev.filter((c) => !selectedContacts.includes(c.id)))
     setSelectedContacts([])
-  }
+  }, [selectedContacts])
 
-  const exportCSV = () => {
+  const exportCSV = useCallback(() => {
     const headers = ['First Name', 'Last Name', 'Phone', 'Email', 'Company', 'Tags', 'Groups', 'Status']
     const rows = contacts.map((c) => [
       c.firstName,
@@ -95,9 +102,9 @@ export default function ContactsPage() {
     a.href = url
     a.download = 'contacts.csv'
     a.click()
-  }
+  }, [contacts])
 
-  const importCSV = (e) => {
+  const importCSV = useCallback((e) => {
     const file = e.target.files[0]
     if (!file) return
     const reader = new FileReader()
@@ -123,19 +130,19 @@ export default function ContactsPage() {
       setContacts((prev) => [...prev, ...imported.filter((c) => c.firstName && c.phone)])
     }
     reader.readAsText(file)
-  }
+  }, [])
 
-  const toggleSelect = (id) => {
+  const toggleSelect = useCallback((id) => {
     setSelectedContacts((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
-  }
+  }, [])
 
-  const toggleSelectAll = () => {
+  const toggleSelectAll = useCallback(() => {
     if (selectedContacts.length === filtered.length) {
       setSelectedContacts([])
     } else {
       setSelectedContacts(filtered.map((c) => c.id))
     }
-  }
+  }, [selectedContacts.length, filtered])
 
   return (
     <div className="page">
@@ -171,14 +178,42 @@ export default function ContactsPage() {
       />
 
       <Card className="mt-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <SearchBar value={search} onChange={setSearch} placeholder="Search contacts..." />
-          {selectedContacts.length > 0 && (
-            <Button variant="danger" size="sm" onClick={bulkDelete}>
-              <Icon name="Trash2" size={16} />
-              Delete ({selectedContacts.length})
-            </Button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={tagFilter}
+              onChange={(e) => setTagFilter(e.target.value)}
+              aria-label="Filter by tag"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+            >
+              <option value="all">All Tags</option>
+              {allTags.map((tag) => (
+                <option key={tag} value={tag}>
+                  {tag}
+                </option>
+              ))}
+            </select>
+            <select
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+              aria-label="Filter by group"
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+            >
+              <option value="all">All Groups</option>
+              {allGroups.map((group) => (
+                <option key={group} value={group}>
+                  {group}
+                </option>
+              ))}
+            </select>
+            {selectedContacts.length > 0 && (
+              <Button variant="danger" size="sm" onClick={bulkDelete}>
+                <Icon name="Trash2" size={16} />
+                Delete ({selectedContacts.length})
+              </Button>
+            )}
+          </div>
         </div>
 
         {activeTab === 'contacts' && (

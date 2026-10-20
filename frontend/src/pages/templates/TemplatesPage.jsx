@@ -1,6 +1,6 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { getTemplates, saveTemplates } from '../../services/templateService.js'
-import { Button, Card, Badge, SearchBar, Modal, Icon, Input, Tabs } from '../../components/index.js'
+import { Button, Card, Badge, SearchBar, Modal, Icon, Input } from '../../components/index.js'
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState(() => getTemplates())
@@ -77,10 +77,10 @@ export default function TemplatesPage() {
   }
 
   const submitForApproval = (id) => {
-    if (!confirm('Submit this template for Meta approval? Note: This is a demo - no actual submission will occur.')) return
+    if (!confirm('Submit this template for Meta approval? Note: no actual submission will occur.')) return
     setTemplates((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'Pending' } : t)))
     saveTemplates(templates)
-    alert('Template submitted for approval (demo)')
+    alert('Template submitted for approval')
   }
 
   const categories = ['Marketing', 'Utility', 'Authentication']
@@ -260,7 +260,13 @@ export default function TemplatesPage() {
               {previewTemplate.buttons && previewTemplate.buttons.length > 0 && (
                 <div className="flex gap-2 mt-3">
                   {previewTemplate.buttons.map((btn, index) => (
-                    <button key={index} className="px-3 py-1 bg-brand-500 text-white rounded text-sm">
+                    <button
+                      key={index}
+                      type="button"
+                      aria-disabled="true"
+                      title="Button preview only"
+                      className="px-3 py-1 bg-brand-600 text-white rounded text-sm opacity-80"
+                    >
                       {btn}
                     </button>
                   ))}

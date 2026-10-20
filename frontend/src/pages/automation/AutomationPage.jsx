@@ -1,5 +1,10 @@
 import { useState } from 'react'
-import { getAutomations, saveAutomations } from '../../services/automationService.js'
+import {
+  getAutomations,
+  saveAutomations,
+  validateWorkflow,
+  simulateWorkflowRun,
+} from '../../services/automationService.js'
 import { Button, Card, Badge, SearchBar, Icon } from '../../components/index.js'
 
 const NODE_TYPES = [
@@ -25,34 +30,67 @@ export default function AutomationPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [nodeCounter, setNodeCounter] = useState(0)
+  const [validationErrors, setValidationErrors] = useState([])
+  const [runResult, setRunResult] = useState(null)
+  const [notice, setNotice] = useState('')
+
+  const persist = (next) => {
+    setItems(next)
+    saveAutomations(next)
+  }
 
   const create = () => {
     const wf = {
-      id: items.length + 1,
+      id: items.reduce((max, w) => Math.max(max, Number(w.id) || 0), 0) + 1,
       name: 'New Workflow',
       description: '',
       status: 'Draft',
+      enabled: false,
       trigger: '',
+      triggerType: 'Event',
+      triggerKeyword: '',
+      triggerTime: '',
       nodes: [],
       edges: [],
       executions: 0,
+      lastRunAt: '',
       updatedAt: new Date().toISOString().slice(0, 10),
     }
-    const next = [...items, wf]
-    setItems(next)
-    saveAutomations(next)
+    persist([...items, wf])
     openEditor(wf)
   }
 
   const openEditor = (wf) => {
     setEditing(wf)
-    setNodes(wf.nodes || [])
+    setNodes(
+      (wf.nodes || []).map((n, index) => ({
+        ...n,
+        runs: n.runs || 0,
+        x: Number.isFinite(n.x) ? n.x : 40 + (index % 3) * 180,
+        y: Number.isFinite(n.y) ? n.y : 40 + Math.floor(index / 3) * 120,
+      }))
+    )
     setEdges(wf.edges || [])
     setSelectedNode(null)
+    setValidationErrors([])
+    setRunResult(null)
+    setNotice('')
+    const maxIndex = (wf.nodes || []).reduce((max, n) => {
+      const parsed = parseInt(String(n.id).replace(/^n/, ''), 10)
+      return Number.isNaN(parsed) ? max : Math.max(max, parsed)
+    }, 0)
+    setNodeCounter(maxIndex)
   }
 
   const addNode = (type) => {
-    const n = { id: 'n' + (nodeCounter + 1), type, config: {}, x: 100 + nodes.length * 50, y: 100 + (nodes.length % 3) * 100 }
+    const n = {
+      id: 'n' + (nodeCounter + 1),
+      type,
+      config: type === 'Trigger' ? { triggerType: 'Event', event: 'new_contact' } : {},
+      runs: 0,
+      x: 40 + (nodes.length % 3) * 180,
+      y: 40 + Math.floor(nodes.length / 3) * 120,
+    }
     setNodes((prev) => [...prev, n])
     setNodeCounter((prev) => prev + 1)
   }
@@ -65,6 +103,17 @@ export default function AutomationPage() {
 
   const updateConfig = (id, key, value) => {
     setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, config: { ...n.config, [key]: value } } : n)))
+    const node = nodes.find((n) => n.id === id)
+    if (node?.type === 'Trigger') {
+      const triggerType = key === 'triggerType' ? value : node.config.triggerType
+      const label =
+        triggerType === 'Keyword'
+          ? `keyword:${node.config.keyword || ''}`
+          : triggerType === 'Schedule'
+            ? `schedule:${node.config.time || ''}`
+            : node.config.event || 'event'
+      setEditing((prev) => (prev ? { ...prev, trigger: label } : prev))
+    }
   }
 
   const connect = (from, to) => {
@@ -78,69 +127,119 @@ export default function AutomationPage() {
   }
 
   const validate = () => {
-    const errors = []
-    if (!nodes.some((n) => n.type === 'Trigger')) errors.push('Missing trigger node')
-    if (!nodes.some((n) => n.type === 'End')) errors.push('Missing end node')
-    nodes.forEach((n) => {
-      if (n.type === 'Condition' && !edges.some((e) => e.from === n.id)) errors.push(`Condition node ${n.id} missing branches`)
-    })
+    const errors = validateWorkflow(nodes, edges)
+    setValidationErrors(errors)
     return errors
   }
 
-  const save = () => {
-    const next = items.map((w) => (w.id === editing.id ? { ...editing, nodes, edges, updatedAt: new Date().toISOString().slice(0, 10) } : w))
-    setItems(next)
-    saveAutomations(next)
-    setEditing(null)
+  const save = (statusOverride) => {
+    const errors = validate()
+    if (statusOverride === 'Active' && errors.length) {
+      setNotice('Workflow cannot be activated until validation errors are fixed')
+      return
+    }
+    const updated = {
+      ...editing,
+      name: editing.name,
+      description: editing.description,
+      trigger: editing.trigger,
+      nodes: nodes.map((n) => ({ ...n, runs: n.runs || 0 })),
+      edges,
+      status: statusOverride || editing.status,
+      enabled: statusOverride === 'Active' ? true : statusOverride === 'Paused' ? false : editing.enabled,
+      updatedAt: new Date().toISOString().slice(0, 10),
+    }
+    persist(items.map((w) => (w.id === editing.id ? updated : w)))
+    setEditing(updated)
+    setNotice(statusOverride ? `Workflow ${statusOverride.toLowerCase()}d` : 'Draft saved')
   }
 
   const activate = () => {
-    const errs = validate()
-    if (errs.length) {
-      alert('Validation errors:\n' + errs.join('\n'))
-      return
-    }
-    const next = items.map((w) => (w.id === editing.id ? { ...editing, nodes, edges, status: 'Active', updatedAt: new Date().toISOString().slice(0, 10) } : w))
-    setItems(next)
-    saveAutomations(next)
-    setEditing(null)
+    save('Active')
   }
 
   const pause = (id) => {
-    const next = items.map((w) => (w.id === id ? { ...w, status: 'Paused' } : w))
-    setItems(next)
-    saveAutomations(next)
+    persist(
+      items.map((w) =>
+        w.id === id ? { ...w, status: 'Paused', enabled: false, updatedAt: new Date().toISOString().slice(0, 10) } : w
+      )
+    )
+    setNotice('Workflow paused')
+  }
+
+  const toggleEnabled = (wf) => {
+    const nextEnabled = !wf.enabled
+    persist(
+      items.map((w) =>
+        w.id === wf.id
+          ? {
+              ...w,
+              enabled: nextEnabled,
+              status: nextEnabled ? 'Active' : 'Paused',
+              updatedAt: new Date().toISOString().slice(0, 10),
+            }
+          : w
+      )
+    )
+    setNotice(`${wf.name} ${nextEnabled ? 'enabled' : 'disabled'}`)
   }
 
   const testRun = () => {
-    const errs = validate()
-    if (errs.length) {
-      alert('Validation errors:\n' + errs.join('\n'))
+    const errors = validate()
+    if (errors.length) {
+      setRunResult(null)
       return
     }
-    const visited = nodes.map((n) => `${n.id} (${n.type})`)
-    alert('Test run simulated.\nExecution path:\n' + visited.join('\n'))
+    const result = simulateWorkflowRun(nodes, edges)
+    const runNodeIds = new Set(result.path)
+    const updatedNodes = nodes.map((n) => ({ ...n, runs: (n.runs || 0) + (runNodeIds.has(n.id) ? 1 : 0) }))
+    setNodes(updatedNodes)
+
+    const lastRunAt = new Date().toISOString().slice(0, 10)
+    const updated = {
+      ...editing,
+      nodes: updatedNodes,
+      edges,
+      executions: (editing.executions || 0) + 1,
+      lastRunAt,
+      updatedAt: lastRunAt,
+    }
+    persist(items.map((w) => (w.id === editing.id ? updated : w)))
+    setEditing(updated)
+    setRunResult(result)
+    setNotice('Test run simulated locally — no messages were sent')
   }
 
   const duplicate = (wf) => {
+    const idMap = new Map()
+    const copiedNodes = (wf.nodes || []).map((n) => {
+      const newId = `${n.id}c${idMap.size}`
+      idMap.set(n.id, newId)
+      return { ...n, id: newId, runs: 0 }
+    })
     const copy = {
       ...wf,
-      id: Date.now(),
+      id: items.reduce((max, w) => Math.max(max, Number(w.id) || 0), 0) + 1,
       name: wf.name + ' (Copy)',
       status: 'Draft',
+      enabled: false,
       executions: 0,
+      lastRunAt: '',
+      nodes: copiedNodes,
+      edges: (wf.edges || []).map((e) => ({
+        from: idMap.get(e.from) || e.from,
+        to: idMap.get(e.to) || e.to,
+      })),
       updatedAt: new Date().toISOString().slice(0, 10),
     }
-    const next = [...items, copy]
-    setItems(next)
-    saveAutomations(next)
+    persist([...items, copy])
+    setNotice(`Duplicated "${wf.name}"`)
   }
 
   const deleteWorkflow = (id) => {
     if (!confirm('Delete this workflow?')) return
-    const next = items.filter((w) => w.id !== id)
-    setItems(next)
-    saveAutomations(next)
+    persist(items.filter((w) => w.id !== id))
+    setNotice('Workflow deleted')
   }
 
   const filtered = items.filter(
@@ -149,12 +248,15 @@ export default function AutomationPage() {
 
   const nodeTypeInfo = NODE_TYPES.find((nt) => nt.type === selectedNode?.type)
 
+  const canvasWidth = Math.max(620, ...nodes.map((n) => (Number.isFinite(n.x) ? n.x : 40) + 190))
+  const canvasHeight = Math.max(500, ...nodes.map((n) => (Number.isFinite(n.y) ? n.y : 40) + 110))
+
   if (editing) {
     return (
       <div className="page">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Workflow Editor: {editing.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Workflow Editor</h1>
             <p className="text-gray-600 dark:text-gray-400">Build automation workflows by adding and connecting nodes</p>
           </div>
           <div className="flex gap-2">
@@ -162,7 +264,7 @@ export default function AutomationPage() {
               <Icon name="Play" size={16} />
               Test Run
             </Button>
-            <Button variant="secondary" onClick={save}>
+            <Button variant="secondary" onClick={() => save()}>
               <Icon name="Save" size={16} />
               Save Draft
             </Button>
@@ -175,6 +277,78 @@ export default function AutomationPage() {
             </Button>
           </div>
         </div>
+
+        <Card className="mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Workflow Name</label>
+              <input
+                value={editing.name || ''}
+                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+              <input
+                value={editing.description || ''}
+                onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+              <div className="flex items-center gap-2 pt-1">
+                <Badge variant={editing.status === 'Active' ? 'success' : editing.status === 'Paused' ? 'warning' : 'info'}>
+                  {editing.status}
+                </Badge>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Executions: {editing.executions || 0}
+                </span>
+                {editing.lastRunAt && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Last run: {editing.lastRunAt}</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {notice && (
+            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+              <Icon name="Info" size={14} className="inline mr-1" />
+              {notice}
+            </p>
+          )}
+
+          {validationErrors.length > 0 && (
+            <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
+              <p className="text-sm font-semibold text-red-700 dark:text-red-300">Fix before activating</p>
+              <ul className="mt-1 list-disc pl-5 text-sm text-red-600 dark:text-red-400">
+                {validationErrors.map((err) => (
+                  <li key={err}>{err}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {runResult && (
+            <div className="mt-3 rounded-md border border-gray-200 p-3 dark:border-gray-700">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Simulated execution path</p>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                {runResult.path
+                  .map((id) => {
+                    const node = nodes.find((n) => n.id === id)
+                    return node ? `${node.type} (${node.id})` : id
+                  })
+                  .join(' → ')}
+              </p>
+              {runResult.unvisited.length > 0 && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Not reached: {runResult.unvisited.join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+        </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <Card title="Node Palette" className="lg:col-span-1">
@@ -194,19 +368,23 @@ export default function AutomationPage() {
 
           <Card title="Workflow Canvas" className="lg:col-span-2">
             <div className="relative min-h-[500px] bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-auto">
-              <svg className="absolute inset-0 w-full h-full pointer-events-none">
+              <svg className="absolute left-0 top-0 pointer-events-none" style={{ width: canvasWidth, height: canvasHeight }}>
                 {edges.map((edge, index) => {
                   const fromNode = nodes.find((n) => n.id === edge.from)
                   const toNode = nodes.find((n) => n.id === edge.to)
                   if (!fromNode || !toNode) return null
+                  const fromX = Number.isFinite(fromNode.x) ? fromNode.x : 0
+                  const fromY = Number.isFinite(fromNode.y) ? fromNode.y : 0
+                  const toX = Number.isFinite(toNode.x) ? toNode.x : 0
+                  const toY = Number.isFinite(toNode.y) ? toNode.y : 0
                   return (
                     <line
                       key={index}
-                      x1={fromNode.x + 75}
-                      y1={fromNode.y + 25}
-                      x2={toNode.x}
-                      y2={toNode.y + 25}
-                      stroke="#25D366"
+                      x1={fromX + 75}
+                      y1={fromY + 25}
+                      x2={toX}
+                      y2={toY + 25}
+                      stroke="#00C667"
                       strokeWidth="2"
                       markerEnd="url(#arrowhead)"
                     />
@@ -214,7 +392,7 @@ export default function AutomationPage() {
                 })}
                 <defs>
                   <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#25D366" />
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#00C667" />
                   </marker>
                 </defs>
               </svg>
@@ -254,6 +432,104 @@ export default function AutomationPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Node ID</label>
                   <p className="text-sm text-gray-600 dark:text-gray-400">{selectedNode.id}</p>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Runs</label>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{selectedNode.runs || 0}</p>
+                </div>
+
+                {selectedNode.type === 'Trigger' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Trigger Type</label>
+                      <select
+                        value={selectedNode.config.triggerType || 'Event'}
+                        onChange={(e) => updateConfig(selectedNode.id, 'triggerType', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                      >
+                        <option value="Event">Event</option>
+                        <option value="Keyword">Keyword</option>
+                        <option value="Schedule">Schedule</option>
+                      </select>
+                    </div>
+                    {(selectedNode.config.triggerType || 'Event') === 'Keyword' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Keyword</label>
+                        <input
+                          type="text"
+                          value={selectedNode.config.keyword || ''}
+                          onChange={(e) => updateConfig(selectedNode.id, 'keyword', e.target.value)}
+                          placeholder="e.g., order, help"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                        />
+                      </div>
+                    )}
+                    {(selectedNode.config.triggerType || 'Event') === 'Schedule' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Schedule Time</label>
+                        <input
+                          type="time"
+                          value={selectedNode.config.time || ''}
+                          onChange={(e) => updateConfig(selectedNode.id, 'time', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                        />
+                      </div>
+                    )}
+                    {(selectedNode.config.triggerType || 'Event') === 'Event' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Event</label>
+                        <select
+                          value={selectedNode.config.event || 'new_contact'}
+                          onChange={(e) => updateConfig(selectedNode.id, 'event', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                        >
+                          <option value="new_contact">New contact</option>
+                          <option value="message_received">Message received</option>
+                          <option value="tag_added">Tag added</option>
+                          <option value="campaign_replied">Campaign reply</option>
+                        </select>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {selectedNode.type === 'AI Agent' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">AI Agent</label>
+                    <input
+                      type="text"
+                      value={selectedNode.config.agent || ''}
+                      onChange={(e) => updateConfig(selectedNode.id, 'agent', e.target.value)}
+                      placeholder="Agent name"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                    />
+                  </div>
+                )}
+
+                {selectedNode.type === 'Add to Group' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Group</label>
+                    <input
+                      type="text"
+                      value={selectedNode.config.group || ''}
+                      onChange={(e) => updateConfig(selectedNode.id, 'group', e.target.value)}
+                      placeholder="Group name"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                    />
+                  </div>
+                )}
+
+                {selectedNode.type === 'Webhook' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Webhook URL</label>
+                    <input
+                      type="text"
+                      value={selectedNode.config.url || ''}
+                      onChange={(e) => updateConfig(selectedNode.id, 'url', e.target.value)}
+                      placeholder="https://example.com/hook"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                    />
+                  </div>
+                )}
 
                 {selectedNode.type === 'Send Message' && (
                   <div>
@@ -387,6 +663,15 @@ export default function AutomationPage() {
         </select>
       </div>
 
+      {notice && (
+        <div className="mb-4 flex items-center justify-between rounded-md border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-700 dark:border-brand-800 dark:bg-brand-900/20 dark:text-brand-300">
+          <span>{notice}</span>
+          <button className="text-xs underline" onClick={() => setNotice('')}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <Card>
         <div className="table-container">
           <table>
@@ -394,9 +679,11 @@ export default function AutomationPage() {
               <tr>
                 <th>Name</th>
                 <th>Status</th>
+                <th>Enabled</th>
                 <th>Trigger</th>
                 <th>Nodes</th>
                 <th>Executions</th>
+                <th>Last Run</th>
                 <th>Last Updated</th>
                 <th>Actions</th>
               </tr>
@@ -404,13 +691,36 @@ export default function AutomationPage() {
             <tbody>
               {filtered.map((w) => (
                 <tr key={w.id}>
-                  <td className="font-medium">{w.name}</td>
+                  <td className="font-medium">
+                    {w.name}
+                    {w.description && (
+                      <span className="block text-xs text-gray-500 dark:text-gray-400">{w.description}</span>
+                    )}
+                  </td>
                   <td>
-                    <Badge variant={w.status === 'Active' ? 'success' : w.status === 'Paused' ? 'warning' : 'info'}>{w.status}</Badge>
+                    <Badge variant={w.status === 'Active' ? 'success' : w.status === 'Paused' ? 'warning' : 'info'}>
+                      {w.status}
+                    </Badge>
+                  </td>
+                  <td>
+                    <button
+                      onClick={() => toggleEnabled(w)}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                        w.enabled ? 'bg-brand-500' : 'bg-gray-300 dark:bg-gray-600'
+                      }`}
+                      aria-label={w.enabled ? 'Disable workflow' : 'Enable workflow'}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                          w.enabled ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
                   </td>
                   <td>{w.trigger || '-'}</td>
                   <td>{(w.nodes || []).length}</td>
-                  <td>{w.executions}</td>
+                  <td>{w.executions || 0}</td>
+                  <td>{w.lastRunAt || '-'}</td>
                   <td>{w.updatedAt}</td>
                   <td>
                     <div className="flex gap-2">

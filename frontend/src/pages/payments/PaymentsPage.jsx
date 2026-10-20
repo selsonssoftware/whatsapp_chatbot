@@ -1,22 +1,15 @@
 import { useState } from 'react'
-import { getTransactions, saveTransactions } from '../../services/ordersService.js'
+import { getTransactions, retryPayment, refundPayment } from '../../services/commerceService.js'
 import { Button, Card, Badge, SearchBar, Icon, Input, Tabs, Modal } from '../../components/index.js'
 
-const DEMO_TRANSACTIONS = [
-  { id: 1, orderId: 1, customer: 'John Doe', amount: 19.99, currency: 'USD', method: 'Card', status: 'success', createdAt: '2026-01-10 10:30', updatedAt: '2026-01-10 10:30' },
-  { id: 2, orderId: 2, customer: 'Jane Smith', amount: 49.99, currency: 'USD', method: 'PayPal', status: 'success', createdAt: '2026-01-11 14:15', updatedAt: '2026-01-11 14:15' },
-  { id: 3, orderId: 3, customer: 'Mike Brown', amount: 79.99, currency: 'USD', method: 'Card', status: 'pending', createdAt: '2026-01-12 09:20', updatedAt: '2026-01-12 09:20' },
-  { id: 4, orderId: 4, customer: 'Emily Davis', amount: 29.99, currency: 'USD', method: 'Card', status: 'failed', createdAt: '2026-01-13 16:45', updatedAt: '2026-01-13 16:45' },
-]
-
-const DEMO_PAYMENT_LINKS = [
+const SEED_PAYMENT_LINKS = [
   { id: 1, title: 'Product Payment', amount: 29.99, currency: 'USD', status: 'active', createdAt: '2026-01-10', expiresAt: '2026-02-10' },
   { id: 2, title: 'Service Fee', amount: 99.99, currency: 'USD', status: 'expired', createdAt: '2026-01-05', expiresAt: '2026-01-12' },
 ]
 
 export default function PaymentsPage() {
-  const [transactions, setTransactions] = useState(DEMO_TRANSACTIONS)
-  const [paymentLinks, setPaymentLinks] = useState(DEMO_PAYMENT_LINKS)
+  const [transactions, setTransactions] = useState(() => getTransactions())
+  const [paymentLinks, setPaymentLinks] = useState(SEED_PAYMENT_LINKS)
   const [activeTab, setActiveTab] = useState('transactions')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -24,21 +17,36 @@ export default function PaymentsPage() {
   const [linkForm, setLinkForm] = useState({ title: '', amount: '', expiresAt: '' })
   const [selectedTx, setSelectedTx] = useState(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [notice, setNotice] = useState(null)
 
   const filteredTx = transactions.filter(
     (t) =>
-      (t.customer + t.orderId).toLowerCase().includes(search.toLowerCase()) &&
+      (t.customer + ' ' + t.orderId).toLowerCase().includes(search.toLowerCase()) &&
       (statusFilter === 'all' || t.status === statusFilter)
   )
 
-  const retryPayment = (id) => {
-    if (!confirm('Retry this payment? Demo mode - no actual retry will occur.')) return
-    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'pending' } : t)))
+  const refresh = () => setTransactions(getTransactions())
+
+  const retryPaymentAction = (id) => {
+    if (!confirm('Retry this payment? No actual retry will occur.')) return
+    const result = retryPayment(id)
+    if (!result.ok) {
+      setNotice({ type: 'error', message: result.error })
+      return
+    }
+    setNotice({ type: 'success', message: `Transaction #${id} moved to pending (simulated retry)` })
+    refresh()
   }
 
-  const refundPayment = (id) => {
-    if (!confirm('Refund this payment? Demo mode - no actual refund will occur.')) return
-    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'refunded' } : t)))
+  const refundPaymentAction = (id) => {
+    if (!confirm('Refund this payment? No actual refund will occur.')) return
+    const result = refundPayment(id)
+    if (!result.ok) {
+      setNotice({ type: 'error', message: result.error })
+      return
+    }
+    setNotice({ type: 'success', message: `Transaction #${id} marked as refunded (simulated)` })
+    refresh()
   }
 
   const createPaymentLink = () => {
@@ -80,6 +88,19 @@ export default function PaymentsPage() {
           Create Payment Link
         </Button>
       </div>
+
+      {notice && (
+        <div
+          className={`mb-4 px-4 py-3 rounded-md border text-sm ${
+            notice.type === 'error'
+              ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+              : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
+          }`}
+          role="status"
+        >
+          {notice.message}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <Card>
@@ -167,12 +188,12 @@ export default function PaymentsPage() {
                           <Icon name="Eye" size={16} />
                         </button>
                         {t.status === 'failed' && (
-                          <button className="icon-btn text-yellow-600" onClick={() => retryPayment(t.id)} aria-label="Retry">
+                          <button className="icon-btn text-yellow-600" onClick={() => retryPaymentAction(t.id)} aria-label="Retry">
                             <Icon name="RefreshCw" size={16} />
                           </button>
                         )}
                         {t.status === 'success' && (
-                          <button className="icon-btn text-orange-600" onClick={() => refundPayment(t.id)} aria-label="Refund">
+                          <button className="icon-btn text-orange-600" onClick={() => refundPaymentAction(t.id)} aria-label="Refund">
                             <Icon name="RefreshCw" size={16} />
                           </button>
                         )}
@@ -212,7 +233,14 @@ export default function PaymentsPage() {
                     <td>{link.expiresAt}</td>
                     <td>
                       <div className="flex gap-2">
-                        <button className="icon-btn" aria-label="Copy Link">
+                        <button
+                          className="icon-btn"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(`https://pay.example.com/${link.id}`)
+                            setNotice({ type: 'success', message: `Link for "${link.title}" copied to clipboard` })
+                          }}
+                          aria-label="Copy Link"
+                        >
                           <Icon name="Copy" size={16} />
                         </button>
                         <button className="icon-btn text-red-600" onClick={() => deleteLink(link.id)} aria-label="Delete">

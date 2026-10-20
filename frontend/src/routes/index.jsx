@@ -1,62 +1,114 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider } from '../contexts/AuthProvider.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
-import LoginPage from '../pages/auth/LoginPage.jsx'
 import AppLayout from '../layouts/AppLayout.jsx'
-import HomePage from '../pages/HomePage.jsx'
-import PlaceholderPage from '../pages/PlaceholderPage.jsx'
-import InboxPage from '../pages/inbox/InboxPage.jsx'
-import ContactsPage from '../pages/contacts/ContactsPage.jsx'
-import ComposePage from '../pages/compose/ComposePage.jsx'
-import LeadsPage from '../pages/leads/LeadsPage.jsx'
-import TemplatesPage from '../pages/templates/TemplatesPage.jsx'
-import CampaignsPage from '../pages/campaigns/CampaignsPage.jsx'
-import AutomationPage from '../pages/automation/AutomationPage.jsx'
-import ChatbotPage from '../pages/chatbot/ChatbotPage.jsx'
-import AIAgentPage from '../pages/ai-agent/AIAgentPage.jsx'
-import FlowsPage from '../pages/flows/FlowsPage.jsx'
-import CatalogPage from '../pages/catalog/CatalogPage.jsx'
-import PaymentsPage from '../pages/payments/PaymentsPage.jsx'
-import OrdersPage from '../pages/orders/OrdersPage.jsx'
-import ReportsPage from '../pages/reports/ReportsPage.jsx'
-import ApiLogsPage from '../pages/logs/ApiLogsPage.jsx'
-import ScheduleLogsPage from '../pages/logs/ScheduleLogsPage.jsx'
-import IntegrationsPage from '../pages/integrations/IntegrationsPage.jsx'
-import TeamPage from '../pages/team/TeamPage.jsx'
-import SettingsPage from '../pages/settings/SettingsPage.jsx'
+import ErrorBoundary from '../components/ErrorBoundary.jsx'
+import RouteFallback from '../components/RouteFallback.jsx'
 import { NAV_ITEMS } from '../constants/roles.js'
 
-const implemented = ['/dashboard','/inbox','/contacts','/compose','/leads','/templates','/campaigns','/automation','/chatbot','/ai-agent','/flows','/catalog','/payments','/orders','/reports','/api-logs','/schedule-logs','/integrations','/team','/settings']
+const LoginPage = lazy(() => import('../pages/auth/LoginPage.jsx'))
+const HomePage = lazy(() => import('../pages/HomePage.jsx'))
+const NotFoundPage = lazy(() => import('../pages/NotFoundPage.jsx'))
+const PlaceholderPage = lazy(() => import('../pages/PlaceholderPage.jsx'))
+const InboxPage = lazy(() => import('../pages/inbox/InboxPage.jsx'))
+const ContactsPage = lazy(() => import('../pages/contacts/ContactsPage.jsx'))
+const ComposePage = lazy(() => import('../pages/compose/ComposePage.jsx'))
+const LeadsPage = lazy(() => import('../pages/leads/LeadsPage.jsx'))
+const TemplatesPage = lazy(() => import('../pages/templates/TemplatesPage.jsx'))
+const CampaignsPage = lazy(() => import('../pages/campaigns/CampaignsPage.jsx'))
+const AutomationPage = lazy(() => import('../pages/automation/AutomationPage.jsx'))
+const ChatbotPage = lazy(() => import('../pages/chatbot/ChatbotPage.jsx'))
+const AIAgentPage = lazy(() => import('../pages/ai-agent/AIAgentPage.jsx'))
+const FlowsPage = lazy(() => import('../pages/flows/FlowsPage.jsx'))
+const CatalogPage = lazy(() => import('../pages/catalog/CatalogPage.jsx'))
+const PaymentsPage = lazy(() => import('../pages/payments/PaymentsPage.jsx'))
+const OrdersPage = lazy(() => import('../pages/orders/OrdersPage.jsx'))
+const ReportsPage = lazy(() => import('../pages/reports/ReportsPage.jsx'))
+const ApiLogsPage = lazy(() => import('../pages/logs/ApiLogsPage.jsx'))
+const ScheduleLogsPage = lazy(() => import('../pages/logs/ScheduleLogsPage.jsx'))
+const IntegrationsPage = lazy(() => import('../pages/integrations/IntegrationsPage.jsx'))
+const TeamPage = lazy(() => import('../pages/team/TeamPage.jsx'))
+const SettingsPage = lazy(() => import('../pages/settings/SettingsPage.jsx'))
+
+const APP_NAME = 'WhatsApp SaaS'
+
+const PAGE_ROUTES = [
+  { path: '/dashboard', component: HomePage },
+  { path: '/inbox', component: InboxPage },
+  { path: '/contacts', component: ContactsPage },
+  { path: '/compose', component: ComposePage },
+  { path: '/leads', component: LeadsPage },
+  { path: '/templates', component: TemplatesPage },
+  { path: '/campaigns', component: CampaignsPage },
+  { path: '/automation', component: AutomationPage },
+  { path: '/chatbot', component: ChatbotPage },
+  { path: '/ai-agent', component: AIAgentPage },
+  { path: '/flows', component: FlowsPage },
+  { path: '/catalog', component: CatalogPage },
+  { path: '/payments', component: PaymentsPage },
+  { path: '/orders', component: OrdersPage },
+  { path: '/reports', component: ReportsPage },
+  { path: '/api-logs', component: ApiLogsPage },
+  { path: '/schedule-logs', component: ScheduleLogsPage },
+  { path: '/integrations', component: IntegrationsPage },
+  { path: '/team', component: TeamPage },
+  { path: '/settings', component: SettingsPage },
+]
+
+const implementedPaths = new Set(PAGE_ROUTES.map((route) => route.path))
+
+function ProtectedPage({ children }) {
+  return (
+    <ProtectedRoute>
+      <AppLayout>{children}</AppLayout>
+    </ProtectedRoute>
+  )
+}
+
+/**
+ * Restores the scroll position on navigation and keeps the document title in
+ * sync with the active module.
+ */
+function RouteEffects() {
+  const { pathname } = useLocation()
+
+  useEffect(() => {
+    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual'
+  }, [])
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+    const label = NAV_ITEMS.find((item) => item.path === pathname)?.label
+    document.title = label ? `${label} · ${APP_NAME}` : APP_NAME
+  }, [pathname])
+
+  return null
+}
 
 function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={<ProtectedRoute><AppLayout><HomePage /></AppLayout></ProtectedRoute>} />
-      <Route path="/inbox" element={<ProtectedRoute><AppLayout><InboxPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/contacts" element={<ProtectedRoute><AppLayout><ContactsPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/compose" element={<ProtectedRoute><AppLayout><ComposePage /></AppLayout></ProtectedRoute>} />
-      <Route path="/leads" element={<ProtectedRoute><AppLayout><LeadsPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/templates" element={<ProtectedRoute><AppLayout><TemplatesPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/campaigns" element={<ProtectedRoute><AppLayout><CampaignsPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/automation" element={<ProtectedRoute><AppLayout><AutomationPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/chatbot" element={<ProtectedRoute><AppLayout><ChatbotPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/ai-agent" element={<ProtectedRoute><AppLayout><AIAgentPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/flows" element={<ProtectedRoute><AppLayout><FlowsPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/catalog" element={<ProtectedRoute><AppLayout><CatalogPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/payments" element={<ProtectedRoute><AppLayout><PaymentsPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/orders" element={<ProtectedRoute><AppLayout><OrdersPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/reports" element={<ProtectedRoute><AppLayout><ReportsPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/api-logs" element={<ProtectedRoute><AppLayout><ApiLogsPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/schedule-logs" element={<ProtectedRoute><AppLayout><ScheduleLogsPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/integrations" element={<ProtectedRoute><AppLayout><IntegrationsPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/team" element={<ProtectedRoute><AppLayout><TeamPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
-      {NAV_ITEMS.filter((n) => !implemented.includes(n.path)).map((n) => (
-        <Route key={n.path} path={n.path} element={<ProtectedRoute><AppLayout><PlaceholderPage title={n.label} /></AppLayout></ProtectedRoute>} />
-      ))}
-    </Routes>
+    <>
+      <RouteEffects />
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          {PAGE_ROUTES.map(({ path, component: Page }) => (
+            <Route key={path} path={path} element={<ProtectedPage><Page /></ProtectedPage>} />
+          ))}
+          {NAV_ITEMS.filter((item) => !implementedPaths.has(item.path)).map((item) => (
+            <Route
+              key={item.path}
+              path={item.path}
+              element={<ProtectedPage><PlaceholderPage title={item.label} /></ProtectedPage>}
+            />
+          ))}
+          <Route path="/404" element={<ProtectedPage><NotFoundPage /></ProtectedPage>} />
+          <Route path="*" element={<Navigate to="/404" replace />} />
+        </Routes>
+      </Suspense>
+    </>
   )
 }
 
@@ -64,7 +116,9 @@ export default function AppRouter() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <ErrorBoundary>
+          <AppRoutes />
+        </ErrorBoundary>
       </AuthProvider>
     </BrowserRouter>
   )

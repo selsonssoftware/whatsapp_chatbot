@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Button, Card, Badge, Icon, Input, Tabs } from '../../components/index.js'
+import { getChatbots, saveChatbots, validateChatbotFlow } from '../../services/chatbotService.js'
+import { Button, Card, Badge, Icon, SearchBar } from '../../components/index.js'
 
 const NODE_TYPES = [
   { type: 'Start', icon: 'Play', color: 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400' },
@@ -11,23 +12,27 @@ const NODE_TYPES = [
   { type: 'End', icon: 'XCircle', color: 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-400' },
 ]
 
-const DEMO_BOTS = [
-  { id: 1, name: 'Customer Support Bot', status: 'Active', description: 'Handles common customer queries', nodes: [], edges: [], createdAt: '2026-01-10' },
-  { id: 2, name: 'Sales Assistant', status: 'Draft', description: 'Helps customers with product information', nodes: [], edges: [], createdAt: '2026-01-12' },
-]
-
 export default function ChatbotPage() {
-  const [bots, setBots] = useState(DEMO_BOTS)
+  const [bots, setBots] = useState(() => getChatbots())
   const [editing, setEditing] = useState(null)
   const [nodes, setNodes] = useState([])
   const [edges, setEdges] = useState([])
   const [selectedNode, setSelectedNode] = useState(null)
   const [previewMessage, setPreviewMessage] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [validation, setValidation] = useState([])
+  const [previewLog, setPreviewLog] = useState([])
+
+  const persist = (next) => {
+    setBots(next)
+    saveChatbots(next)
+  }
 
   const createBot = () => {
     const newBot = {
-      id: Date.now(),
+      id: bots.reduce((max, b) => Math.max(max, b.id), 0) + 1,
       name: 'New Chatbot',
       status: 'Draft',
       description: '',
@@ -35,7 +40,8 @@ export default function ChatbotPage() {
       edges: [],
       createdAt: new Date().toISOString().slice(0, 10),
     }
-    setBots((prev) => [...prev, newBot])
+    persist([...bots, newBot])
+    openEditor(newBot)
   }
 
   const openEditor = (bot) => {
@@ -46,7 +52,7 @@ export default function ChatbotPage() {
   }
 
   const addNode = (type) => {
-    const n = { id: 'n' + Date.now(), type, config: {}, x: 100 + nodes.length * 50, y: 100 + (nodes.length % 3) * 100 }
+    const n = { id: 'n' + (nodes.length + 1) + '-' + type.toLowerCase().replace(/\s+/g, ''), type, config: {}, x: 100 + nodes.length * 50, y: 100 + (nodes.length % 3) * 100 }
     setNodes((prev) => [...prev, n])
   }
 
@@ -67,27 +73,35 @@ export default function ChatbotPage() {
   }
 
   const saveBot = () => {
-    const next = bots.map((b) => (b.id === editing.id ? { ...editing, nodes, edges } : b))
-    setBots(next)
+    const next = bots.map((b) => (b.id === editing.id ? { ...b, ...editing, nodes, edges } : b))
+    persist(next)
     setEditing(null)
   }
 
   const activateBot = (id) => {
-    setBots((prev) => prev.map((b) => (b.id === id ? { ...b, status: 'Active' } : b)))
+    const bot = bots.find((b) => b.id === id)
+    if (!bot) return
+    const errors = validateChatbotFlow(bot.nodes || [], bot.edges || [])
+    if (errors.length) {
+      setValidation(errors)
+      return
+    }
+    setValidation([])
+    persist(bots.map((b) => (b.id === id ? { ...b, status: 'Active' } : b)))
   }
 
   const pauseBot = (id) => {
-    setBots((prev) => prev.map((b) => (b.id === id ? { ...b, status: 'Paused' } : b)))
+    persist(bots.map((b) => (b.id === id ? { ...b, status: 'Paused' } : b)))
   }
 
   const deleteBot = (id) => {
     if (!confirm('Delete this chatbot?')) return
-    setBots((prev) => prev.filter((b) => b.id !== id))
+    persist(bots.filter((b) => b.id !== id))
   }
 
   const duplicateBot = (bot) => {
-    const copy = { ...bot, id: Date.now(), name: bot.name + ' (Copy)', status: 'Draft', createdAt: new Date().toISOString().slice(0, 10) }
-    setBots((prev) => [...prev, copy])
+    const copy = { ...bot, id: bot.id + 1000, name: bot.name + ' (Copy)', status: 'Draft', createdAt: new Date().toISOString().slice(0, 10) }
+    persist([...bots, copy])
   }
 
   const sendPreviewMessage = () => {
@@ -97,14 +111,18 @@ export default function ChatbotPage() {
       'I understand. Let me check that for you.',
       'Sure! Here are some options that might help.',
     ]
-    const response = botResponses[Math.floor(Math.random() * botResponses.length)]
-    setTimeout(() => {
-      alert(`Bot response: ${response}`)
-    }, 500)
+    const response = botResponses[previewLog.length % botResponses.length]
+    setPreviewLog((prev) => [...prev, { from: 'user', text: previewMessage }, { from: 'bot', text: response }])
     setPreviewMessage('')
   }
 
   const nodeTypeInfo = NODE_TYPES.find((nt) => nt.type === selectedNode?.type)
+
+  const filteredBots = bots.filter(
+    (b) =>
+      (b.name + ' ' + (b.description || '')).toLowerCase().includes(search.toLowerCase()) &&
+      (statusFilter === 'all' || b.status === statusFilter)
+  )
 
   if (editing) {
     return (
@@ -163,7 +181,7 @@ export default function ChatbotPage() {
                       y1={fromNode.y + 25}
                       x2={toNode.x}
                       y2={toNode.y + 25}
-                      stroke="#25D366"
+                      stroke="#00C667"
                       strokeWidth="2"
                       markerEnd="url(#arrowhead)"
                     />
@@ -171,7 +189,7 @@ export default function ChatbotPage() {
                 })}
                 <defs>
                   <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#25D366" />
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#00C667" />
                   </marker>
                 </defs>
               </svg>
@@ -296,11 +314,19 @@ export default function ChatbotPage() {
                     <p className="text-sm">Hello! I'm your assistant. How can I help?</p>
                   </div>
                 </div>
-                <div className="flex justify-end">
-                  <div className="bg-brand-500 text-white rounded-lg p-3 max-w-[80%]">
-                    <p className="text-sm">{previewMessage || 'Type a message to test...'}</p>
+                {previewLog.map((entry, index) => (
+                  <div key={index} className={`flex ${entry.from === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      className={
+                        entry.from === 'user'
+                          ? 'bg-brand-100 text-brand-900 dark:bg-brand-900/40 dark:text-brand-100 rounded-lg p-3 max-w-[80%]'
+                          : 'bg-white dark:bg-gray-700 rounded-lg p-3 max-w-[80%]'
+                      }
+                    >
+                      <p className="text-sm">{entry.text}</p>
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
               <div className="mt-3 flex gap-2">
                 <input
@@ -335,8 +361,34 @@ export default function ChatbotPage() {
         </Button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <SearchBar value={search} onChange={setSearch} placeholder="Search chatbots..." />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label="Filter chatbots by status"
+          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+        >
+          <option value="all">All Status</option>
+          <option value="Active">Active</option>
+          <option value="Draft">Draft</option>
+          <option value="Paused">Paused</option>
+        </select>
+      </div>
+
+      {validation.length > 0 && (
+        <div className="mb-4 px-4 py-3 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 text-sm text-amber-800 dark:text-amber-300">
+          <p className="font-medium mb-1">Fix these issues before activating:</p>
+          <ul className="list-disc pl-5 space-y-0.5">
+            {validation.map((v) => (
+              <li key={v}>{v}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {bots.map((bot) => (
+        {filteredBots.map((bot) => (
           <Card key={bot.id} className="hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between mb-3">
               <div>
