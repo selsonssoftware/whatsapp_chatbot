@@ -18,9 +18,17 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $fillable = [
+        'user_id',
         'name',
         'email',
+        'phone',
         'password',
+        'pwd',
+        'role',
+        'status',
+        'languages',
+        'profile',
+        'user_address',
     ];
 
     /**
@@ -40,5 +48,8 @@ class User extends Authenticatable
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'languages' => 'array',   // Automatically converts JSON string to array
+        'status' => 'boolean',
     ];
+    
 }
