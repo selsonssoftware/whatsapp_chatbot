@@ -3,6 +3,8 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Models\Scopes\CompanyScope;
+use App\Support\Role;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -23,12 +25,12 @@ class User extends Authenticatable
         'email',
         'phone',
         'password',
-        'pwd',
         'role',
         'status',
         'languages',
         'profile',
         'user_address',
+        'company_id',
     ];
 
     /**
@@ -39,6 +41,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'pwd',
     ];
 
     /**
@@ -50,6 +53,58 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'languages' => 'array',   // Automatically converts JSON string to array
         'status' => 'boolean',
+        'last_login_at' => 'datetime',
     ];
-    
+
+    /**
+     * Restrict every tenant owned query to the company of the signed in
+     * admin. Super admins manage every company and are never filtered.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new CompanyScope);
+    }
+
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * The account is active unless it was explicitly suspended.
+     */
+    public function isActive(): bool
+    {
+        return (bool) $this->status;
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return Role::isSuperAdmin((string) $this->role);
+    }
+
+    public function isAdmin(): bool
+    {
+        return Role::isAdmin((string) $this->role);
+    }
+
+    /**
+     * The safe representation for API responses. Password hashes, tokens and
+     * secrets are never included.
+     *
+     * @return array<string, mixed>
+     */
+    public function toSafeArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'user_id' => $this->user_id,
+            'name' => $this->name,
+            'email' => $this->email,
+            'role' => $this->role,
+            'status' => (bool) $this->status,
+            'company_id' => $this->company_id,
+            'last_login_at' => optional($this->last_login_at)->toISOString(),
+        ];
+    }
 }

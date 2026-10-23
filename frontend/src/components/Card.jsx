@@ -1,8 +1,8 @@
 import { memo } from 'react'
 
-const Card = memo(function Card({ children, className = '', title, actions }) {
+const Card = memo(function Card({ children, className = '', title, actions, ...props }) {
   return (
-    <div className={`card ${className}`}>
+    <div className={`card ${className}`} {...props}>
       {(title || actions) && (
         <div className="card-header">
           {title && <h3 className="card-title">{title}</h3>}

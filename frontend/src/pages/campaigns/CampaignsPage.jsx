@@ -1,369 +1,544 @@
-﻿import { useState } from 'react'
-import { Button, Card, Badge, Tabs, SearchBar, Modal, Icon, Input } from '../../components/index.js'
-import { getTemplates } from '../../services/templateService.js'
-import { CONTACTS } from '../../data/seedData.js'
-import { getCampaigns, saveCampaigns } from '../../services/campaignService.js'
-
+import { useState } from 'react'
+import {
+  Megaphone,
+  MessageSquare,
+  CheckCircle2,
+  Clock,
+  Search,
+  Filter,
+  Calendar,
+  Plus,
+  MoreVertical,
+  ChevronLeft,
+  ChevronRight,
+  Send,
+  X,
+  FileText,
+  Image,
+  Video,
+  File,
+  Mic,
+  MapPin,
+  UserCheck,
+  LayoutTemplate,
+} from 'lucide-react'
+import { BLAST_KPIS, CAMPAIGNS_DATA } from '../../data/mockBlastData.js'
 
 export default function CampaignsPage() {
-  const [campaigns, setCampaigns] = useState(() => getCampaigns())
-  const [filter, setFilter] = useState('all')
+  const [campaigns, setCampaigns] = useState(CAMPAIGNS_DATA)
+  const [activeTab, setActiveTab] = useState('all')
   const [search, setSearch] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [showDetails, setShowDetails] = useState(false)
-  const [selectedCampaign, setSelectedCampaign] = useState(null)
-  const [templates] = useState(() => getTemplates())
+  const [statusFilter, setStatusFilter] = useState('All Status')
+  const [typeFilter, setTypeFilter] = useState('All Types')
+  const [showDrawer, setShowDrawer] = useState(false)
+  const [feedback, setFeedback] = useState(null)
 
-  const updateCampaigns = (updater) => {
-    setCampaigns((prev) => {
-      const next = updater(prev)
-      saveCampaigns(next)
-      return next
-    })
+  // Drawer state
+  const [drawerAudience, setDrawerAudience] = useState('contacts')
+  const [drawerMsgType, setDrawerMsgType] = useState('text')
+  const [drawerText, setDrawerText] = useState('')
+  const [drawerMode, setDrawerMode] = useState('now')
+
+  const handleSendCampaign = () => {
+    setFeedback('Campaign scheduled and broadcast started successfully!')
+    setShowDrawer(false)
+    setTimeout(() => setFeedback(null), 4000)
   }
-  const [form, setForm] = useState({ name: '', templateId: '', recipients: '', scheduledDate: '', scheduledTime: '' })
-  const [selectedContacts, setSelectedContacts] = useState([])
 
-  const filtered = campaigns.filter(
-    (c) =>
-      (filter === 'all' || c.status === filter) &&
-      c.name.toLowerCase().includes(search.toLowerCase())
-  )
+  const filteredCampaigns = campaigns.filter((c) => {
+    if (activeTab === 'scheduled' && c.status !== 'Scheduled') return false
+    if (activeTab === 'sending' && c.status !== 'Sending') return false
+    if (activeTab === 'completed' && c.status !== 'Completed') return false
+    if (activeTab === 'failed' && c.status !== 'Failed') return false
 
-  const createCampaign = () => {
-    if (!form.name || !form.templateId || selectedContacts.length === 0) {
-      alert('Please fill in all required fields')
-      return
+    if (statusFilter !== 'All Status' && c.status !== statusFilter) return false
+    if (typeFilter !== 'All Types' && c.type !== typeFilter) return false
+
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      return c.name.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q)
     }
-
-    const newCampaign = {
-      id: Date.now(),
-      name: form.name,
-      status: 'scheduled',
-      recipients: selectedContacts.length,
-      sent: 0,
-      delivered: 0,
-      read: 0,
-      failed: 0,
-      templateId: Number(form.templateId),
-      scheduledAt: `${form.scheduledDate} ${form.scheduledTime}`,
-      sentAt: null,
-      createdAt: new Date().toISOString().slice(0, 10),
-    }
-
-    updateCampaigns((prev) => [...prev, newCampaign])
-    setShowForm(false)
-    setForm({ name: '', templateId: '', recipients: '', scheduledDate: '', scheduledTime: '' })
-    setSelectedContacts([])
-  }
-
-  const viewDetails = (campaign) => {
-    setSelectedCampaign(campaign)
-    setShowDetails(true)
-  }
-
-  const pauseCampaign = (id) => {
-    if (!confirm('Pause this campaign?')) return
-    updateCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'paused' } : c)))
-  }
-
-  const resumeCampaign = (id) => {
-    if (!confirm('Resume this campaign?')) return
-    updateCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'in_progress' } : c)))
-  }
-
-  const cancelCampaign = (id) => {
-    if (!confirm('Cancel this campaign?')) return
-    updateCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'cancelled' } : c)))
-  }
-
-  const duplicateCampaign = (campaign) => {
-    const copy = {
-      ...campaign,
-      id: Date.now(),
-      name: campaign.name + ' (Copy)',
-      status: 'draft',
-      sent: 0,
-      delivered: 0,
-      read: 0,
-      failed: 0,
-      scheduledAt: null,
-      sentAt: null,
-      createdAt: new Date().toISOString().slice(0, 10),
-    }
-    updateCampaigns((prev) => [...prev, copy])
-  }
-
-  const deleteCampaign = (id) => {
-    if (!confirm('Delete this campaign?')) return
-    updateCampaigns((prev) => prev.filter((c) => c.id !== id))
-  }
-
-  const statusColors = {
-    draft: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300',
-    scheduled: 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400',
-    in_progress: 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-400',
-    completed: 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400',
-    paused: 'bg-orange-100 dark:bg-orange-900/20 text-orange-800 dark:text-orange-400',
-    cancelled: 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-400',
-  }
-
-  const toggleContact = (id) => {
-    setSelectedContacts((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
-  }
-
-  const totalRecipients = campaigns.reduce((sum, c) => sum + c.recipients, 0)
-  const totalSent = campaigns.reduce((sum, c) => sum + c.sent, 0)
-  const totalDelivered = campaigns.reduce((sum, c) => sum + c.delivered, 0)
-  const avgDeliveryRate = totalSent > 0 ? ((totalDelivered / totalSent) * 100).toFixed(1) : 0
+    return true
+  })
 
   return (
-    <div className="page">
-      <div className="flex items-center justify-between mb-6">
+    <div className="flex flex-col space-y-4 text-slate-800 dark:text-slate-100">
+      {/* Top Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Campaigns & Broadcast</h1>
-          <p className="text-gray-600 dark:text-gray-400">Create and manage message campaigns</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Campaigns / Broadcast
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Send bulk WhatsApp messages to your contacts or groups. Track delivery, read rates and engagement.
+          </p>
         </div>
-        <Button variant="primary" onClick={() => setShowForm(true)}>
-          <Icon name="Plus" size={16} />
-          Create Campaign
-        </Button>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Total Recipients</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{totalRecipients.toLocaleString()}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Messages Sent</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{totalSent.toLocaleString()}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Delivered</p>
-          <p className="text-2xl font-bold text-green-600 dark:text-green-400">{totalDelivered.toLocaleString()}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Avg Delivery Rate</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{avgDeliveryRate}%</p>
-        </Card>
-      </div>
-
-      <div className="flex items-center gap-4 mb-6">
-        <Tabs
-          tabs={[
-            { id: 'all', label: 'All' },
-            { id: 'draft', label: 'Draft' },
-            { id: 'scheduled', label: 'Scheduled' },
-            { id: 'in_progress', label: 'In Progress' },
-            { id: 'completed', label: 'Completed' },
-          ]}
-          activeTab={filter}
-          onChange={setFilter}
-        />
-        <SearchBar value={search} onChange={setSearch} placeholder="Search campaigns..." />
-      </div>
-
-      <Card>
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Recipients</th>
-                <th>Sent</th>
-                <th>Delivered</th>
-                <th>Read</th>
-                <th>Failed</th>
-                <th>Scheduled</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((c) => (
-                <tr key={c.id}>
-                  <td className="font-medium">{c.name}</td>
-                  <td>
-                    <Badge className={statusColors[c.status]}>{c.status.replace('_', ' ')}</Badge>
-                  </td>
-                  <td>{c.recipients}</td>
-                  <td>{c.sent}</td>
-                  <td>{c.delivered}</td>
-                  <td>{c.read}</td>
-                  <td>{c.failed}</td>
-                  <td>{c.scheduledAt || '-'}</td>
-                  <td>
-                    <div className="flex gap-2">
-                      <button className="icon-btn" onClick={() => viewDetails(c)} aria-label="View">
-                        <Icon name="Eye" size={16} />
-                      </button>
-                      {c.status === 'in_progress' && (
-                        <button className="icon-btn text-yellow-600" onClick={() => pauseCampaign(c.id)} aria-label="Pause">
-                          <Icon name="Pause" size={16} />
-                        </button>
-                      )}
-                      {c.status === 'paused' && (
-                        <button className="icon-btn text-green-600" onClick={() => resumeCampaign(c.id)} aria-label="Resume">
-                          <Icon name="Play" size={16} />
-                        </button>
-                      )}
-                      {(c.status === 'scheduled' || c.status === 'in_progress') && (
-                        <button className="icon-btn text-red-600" onClick={() => cancelCampaign(c.id)} aria-label="Cancel">
-                          <Icon name="XCircle" size={16} />
-                        </button>
-                      )}
-                      <button className="icon-btn" onClick={() => duplicateCampaign(c)} aria-label="Duplicate">
-                        <Icon name="Copy" size={16} />
-                      </button>
-                      <button className="icon-btn text-red-600" onClick={() => deleteCampaign(c.id)} aria-label="Delete">
-                        <Icon name="Trash2" size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex items-center gap-3">
+          <button className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+            Campaign Reports ▾
+          </button>
+          <button
+            onClick={() => setShowDrawer(true)}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#00A884] hover:bg-[#008f6f] text-white rounded-xl shadow-sm transition"
+          >
+            <Plus className="w-4 h-4" />
+            Create Campaign
+          </button>
         </div>
-      </Card>
+      </div>
 
-      <Modal
-        isOpen={showForm}
-        onClose={() => setShowForm(false)}
-        title="Create Campaign"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setShowForm(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={createCampaign}>
-              Create Campaign
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <Input label="Campaign Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Template</label>
-            <select
-              value={form.templateId}
-              onChange={(e) => setForm({ ...form, templateId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+      {feedback && (
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-sm flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          {feedback}
+        </div>
+      )}
+
+      {/* 3 KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Total Campaigns</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-[#00A884]">
+              <Megaphone className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.campaigns.total.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.campaigns.total.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.campaigns.total.period}</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Messages Sent</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-[#00A884]">
+              <MessageSquare className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.campaigns.sent.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.campaigns.sent.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.campaigns.sent.period}</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Delivery Rate</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-[#00A884]">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.campaigns.deliveryRate.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.campaigns.deliveryRate.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.campaigns.deliveryRate.period}</p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+        {['All Campaigns', 'Scheduled', 'Sending', 'Completed', 'Failed'].map((tab) => {
+          const key = tab.toLowerCase().split(' ')[0]
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(key)}
+              className={`px-3 py-1 text-sm font-medium rounded-lg transition ${
+                activeTab === key
+                  ? 'bg-[#00A884]/10 text-[#00A884]'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
             >
-              <option value="">Select a template</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Schedule Date</label>
+              {tab}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Workspace Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* Table Area */}
+        <div className={`${showDrawer ? 'lg:col-span-8' : 'lg:col-span-12'} bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs`}>
+          {/* Filters Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div className="relative flex-1 min-w-[220px]">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
-                type="date"
-                value={form.scheduledDate}
-                onChange={(e) => setForm({ ...form, scheduledDate: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                type="text"
+                placeholder="Search campaigns by name..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#00A884]"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Schedule Time</label>
-              <input
-                type="time"
-                value={form.scheduledTime}
-                onChange={(e) => setForm({ ...form, scheduledTime: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-              />
+
+            <div className="flex items-center gap-2 text-xs">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-600 dark:text-slate-300"
+              >
+                <option>All Status</option>
+                <option>Completed</option>
+                <option>Sending</option>
+                <option>Scheduled</option>
+              </select>
+
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-600 dark:text-slate-300"
+              >
+                <option>All Types</option>
+                <option>Marketing</option>
+                <option>Utility</option>
+                <option>Authentication</option>
+              </select>
+
+              <div className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                <span>May 01, 2024 - May 31, 2024</span>
+              </div>
+
+              <button className="flex items-center gap-1 px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800">
+                <Filter className="w-3.5 h-3.5 text-slate-500" />
+                Filter
+              </button>
             </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select Recipients</label>
-            <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md">
-              {CONTACTS.map((c) => (
-                <label key={c.id} className="flex items-center gap-3 p-3 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 border-y border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="py-2.5 px-3 w-8">
+                    <input type="checkbox" className="rounded accent-[#00A884]" />
+                  </th>
+                  <th className="py-2.5 px-2 w-10 font-semibold">#</th>
+                  <th className="py-2.5 px-3 font-semibold">Campaign Name</th>
+                  <th className="py-2.5 px-3 font-semibold">Type</th>
+                  <th className="py-2.5 px-3 font-semibold">Audience</th>
+                  <th className="py-2.5 px-3 font-semibold">Sent</th>
+                  <th className="py-2.5 px-3 font-semibold">Delivered</th>
+                  <th className="py-2.5 px-3 font-semibold">Read</th>
+                  <th className="py-2.5 px-3 font-semibold">Status</th>
+                  <th className="py-2.5 px-3 font-semibold">Scheduled At</th>
+                  <th className="py-2.5 px-3 text-right font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredCampaigns.map((c, idx) => (
+                  <tr key={c.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
+                    <td className="py-3 px-3">
+                      <input type="checkbox" className="rounded accent-[#00A884]" />
+                    </td>
+                    <td className="py-3 px-2 text-slate-400 font-mono">{idx + 1}</td>
+                    <td className="py-3 px-3">
+                      <div>
+                        <span className="font-semibold text-slate-900 dark:text-white block">
+                          {c.name}
+                        </span>
+                        <span className="text-[11px] text-slate-400">{c.desc}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                          c.type === 'Marketing'
+                            ? 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300'
+                            : c.type === 'Utility'
+                            ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
+                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                        }`}
+                      >
+                        {c.type}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-slate-600 dark:text-slate-300">{c.audience}</td>
+                    <td className="py-3 px-3 font-semibold text-slate-700 dark:text-slate-200">
+                      {c.sent}
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="space-y-1">
+                        <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                          {c.delivered}
+                        </span>
+                        <div className="w-16 h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full"
+                            style={{ width: c.delivered.includes('9') ? '95%' : '0%' }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="space-y-1">
+                        <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                          {c.read}
+                        </span>
+                        <div className="w-16 h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-sky-500 rounded-full"
+                            style={{ width: c.read.includes('7') ? '75%' : '0%' }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
+                          c.status === 'Completed'
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : c.status === 'Sending'
+                            ? 'text-sky-600 dark:text-sky-400'
+                            : 'text-amber-500'
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            c.status === 'Completed'
+                              ? 'bg-emerald-500'
+                              : c.status === 'Sending'
+                              ? 'bg-sky-500 animate-pulse'
+                              : 'bg-amber-500'
+                          }`}
+                        />
+                        {c.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-slate-400 text-[11px]">{c.scheduledAt}</td>
+                    <td className="py-3 px-3 text-right">
+                      <button className="p-1 text-slate-400 hover:text-slate-600 rounded">
+                        <MoreVertical className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between pt-4 mt-2 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400">
+            <span>Show 10 per page ▾</span>
+            <div className="flex items-center gap-1">
+              <button className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button className="w-6 h-6 rounded bg-[#00A884] text-white font-bold text-xs flex items-center justify-center">
+                1
+              </button>
+              <button className="w-6 h-6 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-xs flex items-center justify-center">
+                2
+              </button>
+              <button className="w-6 h-6 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-xs flex items-center justify-center">
+                3
+              </button>
+              <button className="w-6 h-6 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-xs flex items-center justify-center">
+                4
+              </button>
+              <button className="w-6 h-6 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-xs flex items-center justify-center">
+                5
+              </button>
+              <span>...</span>
+              <button className="px-1 text-xs">13</button>
+              <button className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Drawer: Create New Campaign */}
+        {showDrawer && (
+          <div className="lg:col-span-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-lg space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Megaphone className="w-4 h-4 text-[#00A884]" />
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Create New Campaign
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowDrawer(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 1. Select Audience */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-5 h-5 rounded-full bg-[#00A884] text-white text-[10px] font-bold flex items-center justify-center">
+                  1
+                </span>
+                <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Select Audience
+                </label>
+              </div>
+
+              <div className="flex gap-1 border-b border-slate-100 dark:border-slate-800 pb-1.5 mb-2 text-xs">
+                {['Contacts', 'Groups', 'Segments'].map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setDrawerAudience(t.toLowerCase())}
+                    className={`px-2.5 py-1 rounded text-[11px] font-medium transition ${
+                      drawerAudience === t.toLowerCase()
+                        ? 'bg-slate-100 dark:bg-slate-800 text-[#00A884]'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+
+              <select className="w-full text-xs p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                <option>Select contacts or groups</option>
+                <option>All Customers (12,540)</option>
+                <option>Active Leads (8,420)</option>
+                <option>VIP Customers (9,840)</option>
+              </select>
+
+              <div className="flex justify-between items-center text-[11px] text-slate-400 mt-1">
+                <span>0 contacts selected</span>
+                <button className="text-[#00A884] hover:underline font-medium">View List</button>
+              </div>
+            </div>
+
+            {/* 2. Message Content */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-[#00A884] text-white text-[10px] font-bold flex items-center justify-center">
+                    2
+                  </span>
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Message Content
+                  </label>
+                </div>
+                <button className="text-[11px] text-[#00A884] font-medium hover:underline">
+                  Use Template
+                </button>
+              </div>
+
+              <div className="grid grid-cols-4 gap-1 mb-2 text-xs">
+                {[
+                  { id: 'text', icon: FileText, label: 'Text' },
+                  { id: 'image', icon: Image, label: 'Image' },
+                  { id: 'video', icon: Video, label: 'Video' },
+                  { id: 'doc', icon: File, label: 'Document' },
+                  { id: 'audio', icon: Mic, label: 'Audio' },
+                  { id: 'loc', icon: MapPin, label: 'Location' },
+                  { id: 'contact', icon: UserCheck, label: 'Contact' },
+                  { id: 'template', icon: LayoutTemplate, label: 'Template' },
+                ].map(({ id, icon: IconC, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setDrawerMsgType(id)}
+                    className={`p-1.5 rounded-lg border flex flex-col items-center justify-center gap-0.5 text-[10px] transition ${
+                      drawerMsgType === id
+                        ? 'border-[#00A884] bg-emerald-50/50 text-[#00A884]'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-500'
+                    }`}
+                  >
+                    <IconC className="w-3.5 h-3.5" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                rows={4}
+                value={drawerText}
+                onChange={(e) => setDrawerText(e.target.value)}
+                placeholder="Type your message here..."
+                className="w-full text-xs p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/80 focus:outline-none focus:ring-1 focus:ring-[#00A884]"
+              />
+
+              <div className="flex items-center justify-between mt-1 text-[11px] text-slate-400">
+                <button className="text-[#00A884] hover:underline font-medium">
+                  Add Variables ▾
+                </button>
+                <span>{drawerText.length}/4096</span>
+              </div>
+            </div>
+
+            {/* 3. Sending Options */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-5 h-5 rounded-full bg-[#00A884] text-white text-[10px] font-bold flex items-center justify-center">
+                  3
+                </span>
+                <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Sending Options
+                </label>
+              </div>
+
+              <div className="space-y-2 text-xs">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
-                    type="checkbox"
-                    checked={selectedContacts.includes(c.id)}
-                    onChange={() => toggleContact(c.id)}
-                    className="rounded border-gray-300"
+                    type="radio"
+                    name="campaignSend"
+                    checked={drawerMode === 'now'}
+                    onChange={() => setDrawerMode('now')}
+                    className="accent-[#00A884]"
                   />
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900 dark:text-gray-100">
-                      {c.firstName} {c.lastName}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{c.phone}</p>
+                  <div>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">Send Now</span>
+                    <p className="text-[10px] text-slate-400">Send messages immediately</p>
                   </div>
                 </label>
-              ))}
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Selected: {selectedContacts.length} contacts</p>
-          </div>
-        </div>
-      </Modal>
 
-      <Modal
-        isOpen={showDetails}
-        onClose={() => { setShowDetails(false); setSelectedCampaign(null) }}
-        title={selectedCampaign?.name}
-        footer={
-          <Button variant="secondary" onClick={() => { setShowDetails(false); setSelectedCampaign(null) }}>
-            Close
-          </Button>
-        }
-      >
-        {selectedCampaign && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Status</p>
-                <Badge className={statusColors[selectedCampaign.status]}>{selectedCampaign.status.replace('_', ' ')}</Badge>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Created</p>
-                <p className="text-gray-900 dark:text-gray-100">{selectedCampaign.createdAt}</p>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="campaignSend"
+                    checked={drawerMode === 'schedule'}
+                    onChange={() => setDrawerMode('schedule')}
+                    className="accent-[#00A884]"
+                  />
+                  <div>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      Schedule for Later
+                    </span>
+                    <p className="text-[10px] text-slate-400">Choose date and time</p>
+                  </div>
+                </label>
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-4">
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <p className="text-xs text-gray-600 dark:text-gray-400">Recipients</p>
-                <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{selectedCampaign.recipients}</p>
-              </div>
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <p className="text-xs text-gray-600 dark:text-gray-400">Sent</p>
-                <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{selectedCampaign.sent}</p>
-              </div>
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <p className="text-xs text-gray-600 dark:text-gray-400">Delivered</p>
-                <p className="text-lg font-bold text-green-600 dark:text-green-400">{selectedCampaign.delivered}</p>
-              </div>
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded">
-                <p className="text-xs text-gray-600 dark:text-gray-400">Read</p>
-                <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{selectedCampaign.read}</p>
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Scheduled At</p>
-              <p className="text-gray-900 dark:text-gray-100">{selectedCampaign.scheduledAt || 'Not scheduled'}</p>
-            </div>
-            {selectedCampaign.sentAt && (
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Sent At</p>
-                <p className="text-gray-900 dark:text-gray-100">{selectedCampaign.sentAt}</p>
-              </div>
-            )}
-            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
-              <p className="text-sm text-amber-800 dark:text-amber-400">
-                <Icon name="Info" size={16} className="inline mr-1" />
-                Simulation: campaign execution is simulated. No actual messages are sent.
-              </p>
-            </div>
+
+            <button
+              onClick={handleSendCampaign}
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#00A884] hover:bg-[#008f6f] text-white rounded-xl text-xs font-semibold shadow-md transition"
+            >
+              <Send className="w-3.5 h-3.5" />
+              Send Campaign
+            </button>
           </div>
         )}
-      </Modal>
+      </div>
     </div>
   )
 }

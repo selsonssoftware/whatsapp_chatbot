@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -15,32 +16,44 @@ class RegistrationController extends Controller
             'name' => 'required|string|max:150',
             'email' => 'required|email|unique:users,email',
             'phone' => 'required|string|max:20',
-            'password' => 'required|string|min:6', // User's choice of password (at least 6 characters)
-            'role' => 'required|in:admin,manager,support',
+            'password' => 'required|string|min:8',
             'status' => 'required|boolean',
-            'languages' => 'required|array', 
+            'languages' => 'required|array',
         ]);
 
         // 2. Generate a unique User ID (e.g., USR-84920)
-        $userId = 'USR' . rand(1000, 9999);
+        $userId = $this->uniqueUserId();
 
-        // 3. Save to Database using the user's chosen password
+        // 3. Save to Database using the user's chosen password.
+        //    The role is assigned by the server: a public registration can
+        //    never create a Super Admin account.
         $user = User::create([
             'user_id' => $userId,
             'name' => $validated['name'],
             'email' => $validated['email'],
             'phone' => $validated['phone'],
-            'role' => $validated['role'],
+            'role' => Role::ADMIN,
             'status' => $validated['status'],
-            'languages' => $validated['languages'], 
+            'languages' => $validated['languages'],
             'password' => Hash::make($validated['password']), // Securely hashed!
-            'pwd' => $validated['password'], // Plain text for your testing (remove this in production)
         ]);
 
-        // 4. Return success response to React
+        // 4. Return success response to React (never the password hash)
         return response()->json([
             'message' => 'User registered successfully!',
-            'user' => $user
+            'user' => $user->toSafeArray()
         ], 201);
+    }
+
+    /**
+     * Generates a user id that is not used by another account yet.
+     */
+    private function uniqueUserId(): string
+    {
+        do {
+            $userId = 'USR' . random_int(10000, 99999);
+        } while (User::where('user_id', $userId)->exists());
+
+        return $userId;
     }
 }

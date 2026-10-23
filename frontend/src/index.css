@@ -1248,6 +1248,134 @@ select:focus {
   color: #fde68a;
 }
 
+/* ---------- Chat monitoring (three column inbox) ---------- */
+
+.inbox-three {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 280px;
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.inbox-three > .inbox-list,
+.inbox-three > .inbox-view {
+  min-height: 0;
+}
+
+.inbox-details-col {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* The details column collapses before the chat column so the thread keeps
+   a usable width on tablets. */
+@media (max-width: 1279px) {
+  .inbox-three {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .inbox-three > .inbox-details-col {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
+  .inbox-three {
+    grid-template-columns: 1fr;
+  }
+
+  .inbox-three > .inbox-list,
+  .inbox-three > .inbox-view {
+    display: none;
+  }
+
+  .inbox-three > .inbox-list.show {
+    display: block;
+  }
+
+  .inbox-three > .inbox-view.show {
+    display: flex;
+  }
+}
+
+.chat-row {
+  display: flex;
+}
+
+.chat-row.incoming {
+  justify-content: flex-start;
+}
+
+.chat-row.outgoing {
+  justify-content: flex-end;
+}
+
+.chat-bubble {
+  max-width: 75%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  box-shadow: 0 1px 1px rgba(15, 23, 42, 0.06);
+}
+
+.chat-row.incoming .chat-bubble {
+  background: #ffffff;
+  border: 1px solid var(--surface-border);
+  border-bottom-left-radius: 0.25rem;
+  color: var(--color-text);
+}
+
+.chat-row.outgoing .chat-bubble {
+  background: #d9fdd3;
+  color: #111827;
+  border-bottom-right-radius: 0.25rem;
+}
+
+.dark .chat-row.incoming .chat-bubble {
+  background: #1f2937;
+  border-color: #374151;
+  color: #f9fafb;
+}
+
+.dark .chat-row.outgoing .chat-bubble {
+  background: #075e54;
+  color: #ecfdf5;
+}
+
+.chat-bubble-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-bubble-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+}
+
+.chat-row.outgoing .chat-bubble-meta {
+  color: rgba(17, 24, 39, 0.6);
+}
+
+.dark .chat-row.outgoing .chat-bubble-meta {
+  color: rgba(236, 253, 245, 0.65);
+}
+
+.inbox-three .conv-item {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+
 /* ---------- Login ---------- */
 
 .login-page {
@@ -1411,4 +1539,233 @@ select:focus {
   font-size: 0.75rem;
   text-align: center;
   color: var(--color-text-muted);
+}
+
+.login-card-wide {
+  max-width: 28rem;
+}
+
+.login-form {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3125rem;
+}
+
+.login-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.login-hint {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.login-input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  background: var(--surface-canvas);
+  color: var(--color-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.login-input:focus {
+  outline: none;
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--wa-green);
+}
+
+.login-input[aria-invalid='true'] {
+  border-color: #ef4444;
+}
+
+.login-submit {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.25rem 0 1rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--surface-border);
+}
+
+.login-link {
+  font-weight: 600;
+  color: #007c72;
+  text-decoration: none;
+}
+
+.login-link:hover {
+  text-decoration: underline;
+}
+
+.dark .login-link {
+  color: var(--wa-green);
+}
+
+/* ---------- Super Admin sign in ---------- */
+
+.login-page-super-admin {
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+  gap: 1rem;
+  flex-direction: column;
+  padding: 2rem 1rem;
+}
+
+/* Soft green accents that never interfere with the contrast of the card. */
+.login-accent {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  pointer-events: none;
+}
+
+.login-accent-top {
+  top: -160px;
+  right: -120px;
+  width: 420px;
+  height: 420px;
+  background: rgba(0, 198, 103, 0.16);
+}
+
+.login-accent-bottom {
+  bottom: -200px;
+  left: -140px;
+  width: 460px;
+  height: 460px;
+  background: rgba(0, 124, 114, 0.12);
+}
+
+.login-card-super-admin {
+  position: relative;
+  z-index: 1;
+  max-width: 27rem;
+  border-radius: 1.25rem;
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.08),
+    0 2px 6px rgba(15, 23, 42, 0.04);
+  padding: 2.25rem 2rem;
+}
+
+.login-brand-role {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.login-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.login-input-icon {
+  position: absolute;
+  left: 0.75rem;
+  color: #9ca3af;
+  pointer-events: none;
+}
+
+.login-input-with-icon {
+  padding-left: 2.25rem;
+}
+
+.login-input-with-action {
+  padding-right: 2.5rem;
+}
+
+.login-input-action {
+  position: absolute;
+  right: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.login-input-action:hover {
+  color: #007c72;
+  background: var(--surface-tint);
+}
+
+.login-input-action:focus-visible {
+  outline: 2px solid #007c72;
+  outline-offset: 1px;
+}
+
+.login-alert {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid #fecaca;
+  border-radius: 0.625rem;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.8125rem;
+}
+
+.login-footer {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+/* ---------- Super Admin console ---------- */
+
+.super-admin-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.super-admin-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.5rem;
+  background: linear-gradient(135deg, #00c667, #007c72);
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+@media (max-width: 639px) {
+  .login-card-super-admin {
+    padding: 1.75rem 1.25rem;
+    border-radius: 1rem;
+  }
 }

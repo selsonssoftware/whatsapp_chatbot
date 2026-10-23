@@ -1,631 +1,545 @@
-﻿import { useMemo, useState } from 'react'
-import { Button, Card, Badge, Icon, Input, Drawer } from '../../components/index.js'
+import { useState } from 'react'
 import {
-  getAgents,
-  saveAgents,
-  getAgentTests,
-  saveAgentTests,
-  recordAgentTest,
-  clearAgentTests,
-  simulateAgentReply,
-} from '../../services/aiAgentService.js'
-
-const EMPTY_FORM = {
-  name: '',
-  description: '',
-  instructions: '',
-  tone: 'Professional',
-  welcomeMessage: '',
-  fallback: '',
-  businessHours: 'Mon-Fri 09:00-18:00',
-  available: true,
-  responseDelay: 700,
-  tools: '',
-  handoffThreshold: 0.7,
-}
-
-const CATEGORIES = ['Product', 'Pricing', 'Policy', 'FAQ', 'Shipping', 'Other']
+  Sparkles,
+  CheckCircle2,
+  Users,
+  Star,
+  Settings,
+  BookOpen,
+  Plus,
+  Send,
+  Edit2,
+  Trash2,
+  MessageSquare,
+  Bot,
+  ExternalLink,
+  ChevronRight,
+  ShieldAlert,
+  BarChart3,
+  List,
+  Wrench,
+  Smartphone,
+  Check,
+} from 'lucide-react'
+import { BLAST_KPIS, AI_AGENTS_DATA } from '../../data/mockBlastData.js'
 
 export default function AIAgentPage() {
-  const [agents, setAgents] = useState(() => getAgents())
-  const [selectedAgent, setSelectedAgent] = useState(null)
-  const [showDrawer, setShowDrawer] = useState(false)
-  const [showPlayground, setShowPlayground] = useState(false)
-  const [playgroundMessage, setPlaygroundMessage] = useState('')
-  const [playgroundHistory, setPlaygroundHistory] = useState([])
-  const [form, setForm] = useState(EMPTY_FORM)
-  const [knowledgeDraft, setKnowledgeDraft] = useState([])
-  const [formError, setFormError] = useState('')
-  const [editingAgent, setEditingAgent] = useState(null)
-  const [tests, setTests] = useState(() => getAgentTests())
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('All')
-  const [notice, setNotice] = useState('')
+  const [agents, setAgents] = useState(AI_AGENTS_DATA)
+  const [selectedAgentId, setSelectedAgentId] = useState(1)
+  const [activeTab, setActiveTab] = useState('agents')
+  const [configTab, setConfigTab] = useState('general')
+  const [tone, setTone] = useState('Friendly')
+  const [feedback, setFeedback] = useState(null)
 
-  const persist = (next) => {
-    setAgents(next)
-    saveAgents(next)
-  }
+  const selectedAgent = agents.find((a) => a.id === selectedAgentId) || agents[0]
 
-  const agentTests = useMemo(
-    () => tests.filter((t) => t.agentId === selectedAgent?.id),
-    [tests, selectedAgent]
-  )
+  // Simulator state
+  const [testMessages, setTestMessages] = useState([
+    { id: 1, sender: 'user', text: 'Hi, I want to check my order status', time: '10:30 AM' },
+    {
+      id: 2,
+      sender: 'agent',
+      text: 'Hello! 👋\nSure, I can help you with that.\nPlease share your order number.',
+      time: '10:30 AM',
+    },
+    { id: 3, sender: 'user', text: 'ORD12345', time: '10:31 AM' },
+    {
+      id: 4,
+      sender: 'agent',
+      text: 'Thanks! Here is your order status:\n\n📦 Order #: ORD12345\n🚚 Status: Out for Delivery\n📅 Expected: May 10, 2024\n\nYou can track your order here:',
+      button: 'Track Order',
+      time: '10:31 AM',
+    },
+  ])
+  const [testInput, setTestInput] = useState('')
 
-  const filteredAgents = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    return agents.filter((agent) => {
-      const matchesStatus = statusFilter === 'All' || agent.status === statusFilter
-      const matchesQuery =
-        !query ||
-        agent.name.toLowerCase().includes(query) ||
-        (agent.description || '').toLowerCase().includes(query)
-      return matchesStatus && matchesQuery
-    })
-  }, [agents, search, statusFilter])
+  const handleTestSend = (e) => {
+    e?.preventDefault()
+    if (!testInput.trim()) return
 
-  const openCreate = () => {
-    setEditingAgent(null)
-    setForm(EMPTY_FORM)
-    setKnowledgeDraft([])
-    setFormError('')
-    setShowDrawer(true)
-  }
-
-  const editAgent = (agent) => {
-    setEditingAgent(agent)
-    setForm({
-      name: agent.name,
-      description: agent.description,
-      instructions: agent.instructions || '',
-      tone: agent.tone || 'Professional',
-      welcomeMessage: agent.welcomeMessage || '',
-      fallback: agent.fallback || '',
-      businessHours: agent.businessHours || 'Mon-Fri 09:00-18:00',
-      available: agent.available !== false,
-      responseDelay: agent.responseDelay ?? 700,
-      tools: (agent.tools || []).join(', '),
-      handoffThreshold: agent.handoffThreshold ?? 0.7,
-    })
-    setKnowledgeDraft((agent.knowledge || []).map((k) => ({ ...k })))
-    setFormError('')
-    setShowDrawer(true)
-  }
-
-  const addKnowledgeEntry = () => {
-    setKnowledgeDraft((prev) => [
-      ...prev,
-      { id: `k${prev.length + 1}-${prev.length}`, title: '', category: 'FAQ', text: '' },
-    ])
-  }
-
-  const updateKnowledgeEntry = (id, patch) => {
-    setKnowledgeDraft((prev) => prev.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)))
-  }
-
-  const removeKnowledgeEntry = (id) => {
-    setKnowledgeDraft((prev) => prev.filter((entry) => entry.id !== id))
-  }
-
-  const saveAgent = () => {
-    if (!form.name.trim()) {
-      setFormError('Agent name is required')
-      return
-    }
-    const cleaned = knowledgeDraft
-      .map((entry) => ({ ...entry, title: entry.title.trim(), text: entry.text.trim() }))
-      .filter((entry) => entry.title || entry.text)
-
-    if (cleaned.length !== knowledgeDraft.length) {
-      setFormError('Every knowledge entry needs a title and content')
-      return
-    }
-    const duplicate = cleaned.find(
-      (entry, index) => cleaned.findIndex((e) => e.title.toLowerCase() === entry.title.toLowerCase()) !== index
-    )
-    if (duplicate) {
-      setFormError(`Duplicate knowledge entry title: "${duplicate.title}"`)
-      return
+    const userMsg = {
+      id: Date.now(),
+      sender: 'user',
+      text: testInput,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     }
 
-    const agentData = {
-      name: form.name.trim(),
-      description: form.description.trim(),
-      instructions: form.instructions.trim(),
-      tone: form.tone,
-      welcomeMessage: form.welcomeMessage.trim(),
-      fallback: form.fallback.trim(),
-      businessHours: form.businessHours.trim(),
-      available: form.available,
-      responseDelay: Number(form.responseDelay) || 700,
-      knowledge: cleaned,
-      tools: form.tools
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean),
-      handoffThreshold: Number(form.handoffThreshold),
-      updatedAt: new Date().toISOString().slice(0, 10),
+    const aiMsg = {
+      id: Date.now() + 1,
+      sender: 'agent',
+      text: `I understand you're asking about "${testInput}". Our customer support team is available 24/7 to help resolve your request!`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     }
 
-    if (editingAgent) {
-      persist(agents.map((a) => (a.id === editingAgent.id ? { ...a, ...agentData } : a)))
-      setNotice(`Agent "${agentData.name}" updated`)
-    } else {
-      const id = agents.reduce((max, a) => Math.max(max, Number(a.id) || 0), 0) + 1
-      persist([...agents, { ...agentData, id, status: 'Draft' }])
-      setNotice(`Agent "${agentData.name}" created as draft`)
-    }
-
-    setShowDrawer(false)
-    setEditingAgent(null)
-    setForm(EMPTY_FORM)
-    setKnowledgeDraft([])
+    setTestMessages((prev) => [...prev, userMsg, aiMsg])
+    setTestInput('')
   }
 
-  const setStatus = (id, status) => {
-    persist(agents.map((a) => (a.id === id ? { ...a, status, updatedAt: new Date().toISOString().slice(0, 10) } : a)))
-  }
-
-  const duplicateAgent = (agent) => {
-    const id = agents.reduce((max, a) => Math.max(max, Number(a.id) || 0), 0) + 1
-    const copy = {
-      ...agent,
-      id,
-      name: `${agent.name} (copy)`,
-      status: 'Draft',
-      knowledge: (agent.knowledge || []).map((k, i) => ({ ...k, id: `${k.id}-c${i}` })),
-      updatedAt: new Date().toISOString().slice(0, 10),
-    }
-    persist([...agents, copy])
-    setNotice(`Duplicated "${agent.name}"`)
-  }
-
-  const deleteAgent = (id) => {
-    if (!confirm('Delete this AI agent?')) return
-    persist(agents.filter((a) => a.id !== id))
-    const remaining = getAgentTests().filter((t) => t.agentId !== id)
-    saveAgentTests(remaining)
-    setTests(remaining)
-    setNotice('Agent deleted')
-  }
-
-  const openPlayground = (agent) => {
-    setSelectedAgent(agent)
-    setPlaygroundHistory(
-      agent.welcomeMessage
-        ? [{ role: 'assistant', text: agent.welcomeMessage, time: new Date().toLocaleTimeString(), matched: [] }]
-        : []
-    )
-    setPlaygroundMessage('')
-    setShowPlayground(true)
-  }
-
-  const sendPlaygroundMessage = () => {
-    const message = playgroundMessage.trim()
-    if (!message || !selectedAgent) return
-
-    const time = new Date().toLocaleTimeString()
-    setPlaygroundHistory((prev) => [...prev, { role: 'user', text: message, time, matched: [] }])
-    setPlaygroundMessage('')
-
-    const result = simulateAgentReply(selectedAgent, message)
-    setTimeout(() => {
-      setPlaygroundHistory((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          text: result.text,
-          time: new Date().toLocaleTimeString(),
-          matched: result.matched.map((m) => m.title),
-          handoff: result.handoff,
-        },
-      ])
-      const next = recordAgentTest({
-        agentId: selectedAgent.id,
-        agentName: selectedAgent.name,
-        message,
-        response: result.text,
-        matched: result.matched.map((m) => m.title),
-        handoff: result.handoff,
-        reason: result.reason,
-      })
-      setTests(next)
-    }, selectedAgent.responseDelay ?? 700)
-  }
-
-  const clearHistory = () => {
-    if (!selectedAgent) return
-    const next = clearAgentTests(selectedAgent.id)
-    setTests(next)
-    setPlaygroundHistory([])
+  const handleSave = () => {
+    setFeedback('AI Agent settings updated successfully!')
+    setTimeout(() => setFeedback(null), 3000)
   }
 
   return (
-    <div className="page">
-      <div className="flex items-center justify-between mb-6">
+    <div className="flex flex-col space-y-4 text-slate-800 dark:text-slate-100">
+      {/* Page Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">AI Agent</h1>
-          <p className="text-gray-600 dark:text-gray-400">Configure AI-powered agents for automated conversations</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+              AI Agent
+            </h1>
+            <span className="px-2 py-0.5 text-xs font-bold bg-[#00A884]/15 text-[#00A884] rounded-full border border-[#00A884]/30">
+              Beta
+            </span>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Create AI-powered WhatsApp agents that understand, respond and take actions for your business.
+          </p>
         </div>
-        <Button variant="primary" onClick={openCreate}>
-          <Icon name="Plus" size={16} />
-          Create Agent
-        </Button>
-      </div>
 
-      {notice && (
-        <div className="mb-4 flex items-center justify-between rounded-md border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-700 dark:border-brand-800 dark:bg-brand-900/20 dark:text-brand-300">
-          <span>{notice}</span>
-          <button className="text-xs underline" onClick={() => setNotice('')}>
-            Dismiss
+        <div className="flex items-center gap-3">
+          <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 shadow-2xs">
+            <Settings className="w-3.5 h-3.5 text-slate-500" />
+            AI Settings
+          </button>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 shadow-2xs">
+            <BookOpen className="w-3.5 h-3.5 text-slate-500" />
+            Knowledge Base
+          </button>
+          <button
+            onClick={() => handleSave()}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#00A884] hover:bg-[#008f6f] text-white rounded-xl shadow-sm transition"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Create AI Agent
           </button>
         </div>
+      </div>
+
+      {feedback && (
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-sm flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          {feedback}
+        </div>
       )}
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Input
-          label="Search agents"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Name or description"
-          className="max-w-xs"
-        />
-        <div className="flex items-center gap-2">
-          {['All', 'Active', 'Draft', 'Paused'].map((status) => (
-            <Button
-              key={status}
-              variant={statusFilter === status ? 'primary' : 'secondary'}
-              size="sm"
-              onClick={() => setStatusFilter(status)}
-            >
-              {status}
-            </Button>
-          ))}
+      {/* 4 KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Total Conversations</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-[#00A884]">
+              <MessageSquare className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.aiAgent.totalConversations.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.aiAgent.totalConversations.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.aiAgent.totalConversations.period}</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Resolution Rate</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.aiAgent.resolutionRate.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.aiAgent.resolutionRate.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.aiAgent.resolutionRate.period}</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Human Handover</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-500">
+              <Users className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.aiAgent.humanHandover.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.aiAgent.humanHandover.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.aiAgent.humanHandover.period}</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Customer Satisfaction</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-[#00A884]">
+              <Star className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.aiAgent.satisfaction.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.aiAgent.satisfaction.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.aiAgent.satisfaction.period}</p>
         </div>
       </div>
 
-      {filteredAgents.length === 0 ? (
-        <Card>
-          <p className="text-sm text-gray-500 dark:text-gray-400">No agents match the current filters.</p>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredAgents.map((agent) => (
-            <Card key={agent.id} className="hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">{agent.name}</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{agent.description}</p>
-                </div>
-                <Badge variant={agent.status === 'Active' ? 'success' : agent.status === 'Paused' ? 'warning' : 'info'}>
-                  {agent.status}
-                </Badge>
-              </div>
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <Icon name="MessageSquare" size={14} />
-                  <span>Tone: {agent.tone}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <Icon name="Book" size={14} />
-                  <span>{(agent.knowledge || []).length} knowledge entries</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <Icon name="Clock" size={14} />
-                  <span>{agent.businessHours || 'No business hours set'}</span>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" size="sm" className="flex-1" onClick={() => editAgent(agent)}>
-                  <Icon name="Edit" size={14} />
-                  Edit
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => openPlayground(agent)}>
-                  <Icon name="Play" size={14} />
-                  Test
-                </Button>
-                {agent.status === 'Active' ? (
-                  <Button variant="secondary" size="sm" onClick={() => setStatus(agent.id, 'Paused')}>
-                    <Icon name="Pause" size={14} />
-                  </Button>
-                ) : (
-                  <Button variant="secondary" size="sm" onClick={() => setStatus(agent.id, 'Active')}>
-                    <Icon name="Play" size={14} />
-                  </Button>
-                )}
-                <Button variant="secondary" size="sm" onClick={() => duplicateAgent(agent)}>
-                  <Icon name="Copy" size={14} />
-                </Button>
-                <Button variant="danger" size="sm" onClick={() => deleteAgent(agent.id)}>
-                  <Icon name="Trash2" size={14} />
-                </Button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      <Drawer
-        isOpen={showDrawer}
-        onClose={() => {
-          setShowDrawer(false)
-          setEditingAgent(null)
-        }}
-        title={editingAgent ? 'Edit AI Agent' : 'Create AI Agent'}
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setShowDrawer(false)
-                setEditingAgent(null)
-              }}
+      {/* Main Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+        {['Agents', 'Knowledge Base', 'Tools & Actions', 'Guardrails', 'Analytics', 'Logs'].map((tab) => {
+          const key = tab.toLowerCase().split(' ')[0]
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(key)}
+              className={`px-3 py-1 text-sm font-medium rounded-lg transition ${
+                activeTab === key
+                  ? 'bg-[#00A884]/10 text-[#00A884]'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
             >
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={saveAgent}>
-              {editingAgent ? 'Update' : 'Create'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <Input
-            label="Agent Name"
-            value={form.name}
-            onChange={(e) => {
-              setForm({ ...form, name: e.target.value })
-              setFormError('')
-            }}
-            error={formError}
-          />
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">System Instructions</label>
-            <textarea
-              value={form.instructions}
-              onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-              rows={4}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-              placeholder="Define how the AI should behave..."
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Response Tone</label>
-            <select
-              value={form.tone}
-              onChange={(e) => setForm({ ...form, tone: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-            >
-              <option value="Professional">Professional</option>
-              <option value="Friendly">Friendly</option>
-              <option value="Casual">Casual</option>
-              <option value="Formal">Formal</option>
-            </select>
-          </div>
-          <Input
-            label="Welcome Message"
-            value={form.welcomeMessage}
-            onChange={(e) => setForm({ ...form, welcomeMessage: e.target.value })}
-            placeholder="Message sent when the conversation starts"
-          />
-          <Input
-            label="Fallback Response"
-            value={form.fallback}
-            onChange={(e) => setForm({ ...form, fallback: e.target.value })}
-            placeholder="Used when no knowledge entry matches"
-          />
-          <Input
-            label="Business Hours"
-            value={form.businessHours}
-            onChange={(e) => setForm({ ...form, businessHours: e.target.value })}
-            placeholder="Mon-Fri 09:00-18:00"
-          />
-          <div className="flex items-center gap-2">
-            <input
-              id="agent-available"
-              type="checkbox"
-              checked={form.available}
-              onChange={(e) => setForm({ ...form, available: e.target.checked })}
-            />
-            <label htmlFor="agent-available" className="text-sm text-gray-700 dark:text-gray-300">
-              Agent accepts conversations
-            </label>
-          </div>
-          <Input
-            label="Response Delay (ms)"
-            type="number"
-            min="0"
-            max="5000"
-            step="100"
-            value={form.responseDelay}
-            onChange={(e) => setForm({ ...form, responseDelay: e.target.value })}
-          />
+              {tab}
+            </button>
+          )
+        })}
+      </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Knowledge Base ({knowledgeDraft.length})
-              </label>
-              <Button variant="secondary" size="sm" onClick={addKnowledgeEntry}>
-                <Icon name="Plus" size={14} />
-                Add entry
-              </Button>
-            </div>
-            {knowledgeDraft.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400">No knowledge entries yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {knowledgeDraft.map((entry) => (
-                  <div key={entry.id} className="rounded-md border border-gray-200 p-3 dark:border-gray-700">
-                    <div className="flex gap-2">
-                      <input
-                        value={entry.title}
-                        onChange={(e) => updateKnowledgeEntry(entry.id, { title: e.target.value })}
-                        placeholder="Title"
-                        className="flex-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
-                      />
-                      <select
-                        value={entry.category}
-                        onChange={(e) => updateKnowledgeEntry(entry.id, { category: e.target.value })}
-                        className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
-                      >
-                        {CATEGORIES.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
-                      <Button variant="danger" size="sm" onClick={() => removeKnowledgeEntry(entry.id)}>
-                        <Icon name="Trash2" size={14} />
-                      </Button>
-                    </div>
-                    <textarea
-                      value={entry.text}
-                      onChange={(e) => updateKnowledgeEntry(entry.id, { text: e.target.value })}
-                      rows={2}
-                      placeholder="Knowledge content used to answer questions"
-                      className="mt-2 w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
-                    />
+      {/* 3-Section Workspace */}
+      <div className="grid grid-cols-12 gap-4 items-start">
+        {/* Left: Agents List (3 cols) */}
+        <div className="col-span-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3 shadow-2xs space-y-2">
+          {agents.map((ag) => (
+            <div
+              key={ag.id}
+              onClick={() => setSelectedAgentId(ag.id)}
+              className={`p-3 rounded-xl border transition cursor-pointer ${
+                ag.id === selectedAgentId
+                  ? 'border-[#00A884] bg-emerald-50/40 dark:bg-emerald-950/20'
+                  : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-[#00A884] flex items-center justify-center">
+                    <Bot className="w-3.5 h-3.5" />
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <Input
-            label="Available Tools (comma-separated)"
-            value={form.tools}
-            onChange={(e) => setForm({ ...form, tools: e.target.value })}
-            placeholder="Search, Handoff, Database"
-          />
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Human Handoff Threshold (0-1)
-            </label>
-            <input
-              type="number"
-              min="0"
-              max="1"
-              step="0.1"
-              value={form.handoffThreshold}
-              onChange={(e) => setForm({ ...form, handoffThreshold: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-            />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              When the confidence of a knowledge match is below this value the agent escalates to a human.
-            </p>
-          </div>
-        </div>
-      </Drawer>
-
-      <Drawer
-        isOpen={showPlayground}
-        onClose={() => {
-          setShowPlayground(false)
-          setSelectedAgent(null)
-        }}
-        title={`Test Playground: ${selectedAgent?.name}`}
-        footer={
-          <div className="flex w-full gap-2">
-            <Button variant="secondary" className="flex-1" onClick={clearHistory}>
-              Clear history
-            </Button>
-            <Button
-              variant="secondary"
-              className="flex-1"
-              onClick={() => {
-                setShowPlayground(false)
-                setSelectedAgent(null)
-              }}
-            >
-              Close
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded">
-            <p className="text-sm text-blue-800 dark:text-blue-400">
-              <Icon name="Info" size={16} className="inline mr-1" />
-              Simulation: replies are matched locally against this agent&apos;s knowledge base. No AI model is running.
-            </p>
-          </div>
-
-          <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 space-y-3 min-h-[300px] max-h-[400px] overflow-y-auto">
-            {playgroundHistory.length === 0 && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 text-center">Start a conversation to test the agent</p>
-            )}
-            {playgroundHistory.map((msg, index) => (
-              <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`rounded-lg p-3 max-w-[80%] ${
-                    msg.role === 'user' ? 'bg-brand-100 text-brand-900 dark:bg-brand-900/40 dark:text-brand-100' : 'bg-white dark:bg-gray-700'
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                    {ag.name}
+                  </h4>
+                </div>
+                <span
+                  className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                    ag.status === 'Active'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : ag.status === 'Paused'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-slate-100 text-slate-600'
                   }`}
                 >
-                  <p className="text-sm">{msg.text}</p>
-                  {msg.matched && msg.matched.length > 0 && (
-                    <p className="text-xs mt-1 opacity-70">Matched: {msg.matched.join(', ')}</p>
-                  )}
-                  {msg.handoff && (
-                    <p className="text-xs mt-1 opacity-70">Escalated to human agent</p>
-                  )}
-                  <p className="text-xs mt-1 opacity-70">{msg.time}</p>
+                  {ag.status}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{ag.desc}</p>
+            </div>
+          ))}
+
+          <button className="w-full py-2 border border-dashed border-slate-300 dark:border-slate-700 text-[#00A884] hover:bg-emerald-50 rounded-xl text-xs font-semibold flex items-center justify-center gap-1">
+            <Plus className="w-3.5 h-3.5" /> Create New Agent
+          </button>
+        </div>
+
+        {/* Center: Configuration Panels (5 cols) */}
+        <div className="col-span-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-4">
+          {/* Header of center panel */}
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                  {selectedAgent.name}
+                </h3>
+                <Edit2 className="w-3.5 h-3.5 text-slate-400 cursor-pointer" />
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Answer customer questions, provide support and take actions automatically.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-emerald-600">Active</span>
+              <button
+                onClick={handleSave}
+                className="px-3 py-1 bg-[#00A884] hover:bg-[#008f6f] text-white text-xs font-semibold rounded-lg shadow-xs"
+              >
+                + Save
+              </button>
+            </div>
+          </div>
+
+          {/* Configuration subtabs */}
+          <div className="flex gap-2 border-b border-slate-100 dark:border-slate-800 pb-2 text-xs">
+            {['General', 'Instructions', 'Knowledge', 'Actions', 'Handover', 'Advanced'].map((t) => (
+              <button
+                key={t}
+                onClick={() => setConfigTab(t.toLowerCase())}
+                className={`font-semibold pb-1 transition ${
+                  configTab === t.toLowerCase()
+                    ? 'text-[#00A884] border-b-2 border-[#00A884]'
+                    : 'text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+
+          {/* Form */}
+          <div className="space-y-3.5 text-xs">
+            <div>
+              <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                Agent Name *
+              </label>
+              <input
+                type="text"
+                defaultValue={selectedAgent.name}
+                className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800"
+              />
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                Agent Personality
+              </label>
+              <textarea
+                rows={2}
+                defaultValue="You are a helpful, friendly and professional customer support assistant for our business. Keep responses short, clear and friendly."
+                className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 leading-relaxed"
+              />
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                Description *
+              </label>
+              <textarea
+                rows={2}
+                defaultValue="Handles customer queries, provides product information, tracks orders and resolves common issues."
+                className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 leading-relaxed"
+              />
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                AI Model
+              </label>
+              <select className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                <option>GPT-4o (Recommended)</option>
+                <option>Claude 3.5 Sonnet</option>
+                <option>Gemini 1.5 Pro</option>
+              </select>
+              <p className="text-[10px] text-slate-400 mt-1">
+                Advanced reasoning and better WhatsApp response quality.
+              </p>
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
+                Response Tone
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {['Friendly', 'Professional', 'Casual', 'Formal', 'Empathetic', 'Concise'].map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTone(t)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                      tone === t
+                        ? 'bg-[#00A884] text-white shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  Language
+                </label>
+                <select className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                  <option>English</option>
+                  <option>Spanish</option>
+                  <option>French</option>
+                  <option>Tamil</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  Business Hours
+                </label>
+                <select className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                  <option>24/7 (Always Active)</option>
+                  <option>Office Hours (9AM - 6PM)</option>
+                  <option>Custom Schedule</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Test AI Agent Phone Simulator (4 cols) */}
+        <div className="col-span-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs flex flex-col h-[650px]">
+          <div className="flex items-center gap-2 mb-3">
+            <Smartphone className="w-4 h-4 text-[#00A884]" />
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white">Test AI Agent</h3>
+          </div>
+
+          {/* Smartphone container */}
+          <div className="flex-1 flex flex-col rounded-3xl border-4 border-slate-800 dark:border-slate-700 bg-[#EFEAE2] dark:bg-slate-950 overflow-hidden shadow-inner">
+            {/* Header */}
+            <div className="bg-[#008069] text-white p-3 flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs">
+                AI
+              </div>
+              <div>
+                <h4 className="text-xs font-bold leading-tight">Customer Support AI</h4>
+                <span className="text-[10px] text-emerald-200">Online</span>
+              </div>
+            </div>
+
+            {/* Chat Messages */}
+            <div className="flex-1 p-3 overflow-y-auto space-y-2.5">
+              {testMessages.map((m) => {
+                const isUser = m.sender === 'user'
+                return (
+                  <div key={m.id} className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
+                    <div
+                      className={`max-w-[85%] rounded-xl p-2.5 text-xs shadow-2xs whitespace-pre-line leading-relaxed ${
+                        isUser
+                          ? 'bg-[#E7F8F0] dark:bg-emerald-950/80 text-slate-900 dark:text-white rounded-tr-none'
+                          : 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-tl-none'
+                      }`}
+                    >
+                      {m.text}
+                      {m.button && (
+                        <div className="mt-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                          <button className="w-full py-1 text-center font-bold text-sky-600 dark:text-sky-400 text-[11px] flex items-center justify-center gap-1">
+                            <ExternalLink className="w-3 h-3" />
+                            {m.button}
+                          </button>
+                        </div>
+                      )}
+                      <div className="flex justify-end text-[9px] text-slate-400 mt-1">{m.time}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Input bar */}
+            <form
+              onSubmit={handleTestSend}
+              className="p-2 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center gap-1.5"
+            >
+              <input
+                type="text"
+                placeholder="Type a message..."
+                value={testInput}
+                onChange={(e) => setTestInput(e.target.value)}
+                className="flex-1 px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="p-2 bg-[#00A884] hover:bg-[#008f6f] text-white rounded-lg transition"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Tools & Customer Intents Bar */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Quick Actions (Tools) */}
+        <div className="lg:col-span-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">Quick Actions (Tools)</h3>
+              <p className="text-[11px] text-slate-400">Allow AI to perform actions in your CRM.</p>
+            </div>
+            <button className="text-xs font-semibold text-[#00A884] hover:underline">+ Add Action</button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {[
+              { title: 'Check Order Status', cat: 'Order Management', icon: '📦' },
+              { title: 'Get Product Info', cat: 'Catalog', icon: '🛍️' },
+              { title: 'Create Support Ticket', cat: 'Support', icon: '🎫' },
+              { title: 'Update Contact Info', cat: 'CRM', icon: '👥' },
+              { title: 'Book Appointment', cat: 'Bookings', icon: '📅' },
+              { title: 'Handover to Agent', cat: 'Live Chat', icon: '🧑‍💻' },
+            ].map((tool, idx) => (
+              <div
+                key={idx}
+                className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-800/50 flex items-center gap-2.5 text-xs"
+              >
+                <span className="text-lg">{tool.icon}</span>
+                <div className="min-w-0">
+                  <h5 className="font-semibold text-slate-900 dark:text-white truncate">{tool.title}</h5>
+                  <span className="text-[10px] text-slate-400">{tool.cat}</span>
                 </div>
               </div>
             ))}
           </div>
+        </div>
 
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={playgroundMessage}
-              onChange={(e) => setPlaygroundMessage(e.target.value)}
-              placeholder="Type a message..."
-              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-              onKeyPress={(e) => e.key === 'Enter' && sendPlaygroundMessage()}
-            />
-            <Button variant="primary" size="sm" onClick={sendPlaygroundMessage}>
-              Send
-            </Button>
+        {/* Top Customer Intents */}
+        <div className="lg:col-span-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white">Top Customer Intents</h3>
+            <button className="text-xs font-semibold text-[#00A884] hover:underline">View All &gt;</button>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                Test history ({agentTests.length})
-              </h4>
-            </div>
-            {agentTests.length === 0 ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400">No tests recorded for this agent yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {agentTests
-                  .slice()
-                  .reverse()
-                  .map((test) => (
-                    <div key={test.id} className="rounded-md border border-gray-200 p-2 text-sm dark:border-gray-700">
-                      <p className="font-medium text-gray-800 dark:text-gray-200">{test.message}</p>
-                      <p className="text-gray-600 dark:text-gray-400">{test.response}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                        {new Date(test.createdAt).toLocaleString()} · {test.reason}
-                        {test.matched?.length ? ` · matched: ${test.matched.join(', ')}` : ''}
-                      </p>
-                    </div>
-                  ))}
+          <div className="space-y-2 text-xs">
+            {[
+              { intent: 'Order Status', pct: 32, color: 'bg-emerald-500' },
+              { intent: 'Product Information', pct: 24, color: 'bg-emerald-500' },
+              { intent: 'Returns & Refunds', pct: 16, color: 'bg-emerald-500' },
+              { intent: 'Pricing & Offers', pct: 12, color: 'bg-emerald-500' },
+              { intent: 'Talk to Human', pct: 8, color: 'bg-emerald-500' },
+            ].map((item, idx) => (
+              <div key={idx} className="space-y-0.5">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-600 dark:text-slate-300 font-medium">{item.intent}</span>
+                  <span className="font-bold text-slate-700 dark:text-slate-200">{item.pct}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div className={`h-full ${item.color} rounded-full`} style={{ width: `${item.pct * 2.5}%` }} />
+                </div>
               </div>
-            )}
+            ))}
           </div>
         </div>
-      </Drawer>
+      </div>
     </div>
   )
 }

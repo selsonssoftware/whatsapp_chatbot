@@ -1,473 +1,547 @@
 import { useState } from 'react'
-import { getProducts, saveProducts, getCategories, saveCategories } from '../../services/catalogService.js'
-import { Button, Card, Badge, SearchBar, Icon, Input, Modal, Tabs } from '../../components/index.js'
-
-const EMPTY_FORM = { name: '', sku: '', description: '', category: '', price: '', stock: '', status: 'active' }
+import {
+  Package,
+  CheckCircle2,
+  Folder,
+  Eye,
+  Plus,
+  Upload,
+  Download,
+  Search,
+  Filter,
+  Edit2,
+  MoreVertical,
+  X,
+  ExternalLink,
+  ChevronLeft,
+  ChevronRight,
+  ShoppingBag,
+  Share2,
+} from 'lucide-react'
+import { BLAST_KPIS, CATALOG_PRODUCTS } from '../../data/mockBlastData.js'
 
 export default function CatalogPage() {
-  const [products, setProducts] = useState(() => getProducts())
-  const [categories, setCategories] = useState(() => getCategories())
+  const [products, setProducts] = useState(CATALOG_PRODUCTS)
+  const [selectedProductId, setSelectedProductId] = useState(1)
+  const [activeTab, setActiveTab] = useState('all')
   const [search, setSearch] = useState('')
-  const [view, setView] = useState('table')
-  const [categoryFilter, setCategoryFilter] = useState('all')
-  const [stockFilter, setStockFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [showForm, setShowForm] = useState(false)
-  const [editingProduct, setEditingProduct] = useState(null)
-  const [form, setForm] = useState({ name: '', sku: '', description: '', category: '', price: '', stock: '', status: 'active' })
-  const [errors, setErrors] = useState({})
-  const [showPreview, setShowPreview] = useState(false)
-  const [previewProduct, setPreviewProduct] = useState(null)
-  const [showCategories, setShowCategories] = useState(false)
-  const [newCategory, setNewCategory] = useState('')
-  const [categoryError, setCategoryError] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('All Categories')
+  const [statusFilter, setStatusFilter] = useState('All Status')
+  const [showDrawer, setShowDrawer] = useState(true)
+  const [drawerTab, setDrawerTab] = useState('details')
+  const [feedback, setFeedback] = useState(null)
 
-  const filtered = products.filter(
-    (p) =>
-      (p.name + p.sku + p.description).toLowerCase().includes(search.toLowerCase()) &&
-      (categoryFilter === 'all' || p.category === categoryFilter) &&
-      (statusFilter === 'all' || p.status === statusFilter) &&
-      (stockFilter === 'all' ||
-        (stockFilter === 'out' ? p.stock <= 0 : stockFilter === 'low' ? p.stock > 0 && p.stock <= 10 : p.stock > 10))
-  )
+  const selectedProduct =
+    products.find((p) => p.id === selectedProductId) || products[0]
 
-  const validateForm = () => {
-    const e = {}
-    if (!form.name.trim()) e.name = 'Product name is required'
-    if (!form.sku.trim()) e.sku = 'SKU is required'
-    else if (products.some((p) => p.sku.toLowerCase() === form.sku.trim().toLowerCase() && p.id !== editingProduct?.id))
-      e.sku = 'SKU already exists'
-    if (form.price === '' || Number.isNaN(Number(form.price))) e.price = 'Enter a valid price'
-    else if (Number(form.price) < 0) e.price = 'Price cannot be negative'
-    if (form.stock === '' || Number.isNaN(Number(form.stock))) e.stock = 'Enter a valid quantity'
-    else if (Number(form.stock) < 0) e.stock = 'Stock cannot be negative'
-    setErrors(e)
-    return Object.keys(e).length === 0
+  const toggleProductActive = (id, e) => {
+    e.stopPropagation()
+    setProducts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, active: !p.active } : p))
+    )
   }
 
-  const persistProducts = (next) => {
-    setProducts(next)
-    saveProducts(next)
+  const handleSaveProduct = () => {
+    setFeedback('Product details saved successfully!')
+    setTimeout(() => setFeedback(null), 3000)
   }
 
-  const editProduct = (product) => {
-    setEditingProduct(product)
-    setForm({
-      name: product.name,
-      sku: product.sku,
-      description: product.description,
-      category: product.category,
-      price: product.price,
-      stock: product.stock,
-      status: product.status,
-    })
-    setShowForm(true)
-  }
-
-  const saveProduct = () => {
-    if (!validateForm()) return
-    const productData = {
-      ...form,
-      price: Number(form.price),
-      stock: Number(form.stock),
-      updatedAt: new Date().toISOString().slice(0, 10),
+  const filteredProducts = products.filter((p) => {
+    if (categoryFilter !== 'All Categories' && p.category !== categoryFilter) return false
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q)
+      )
     }
-
-    if (editingProduct) {
-      const next = products.map((p) => (p.id === editingProduct.id ? { ...p, ...productData } : p))
-      persistProducts(next)
-    } else {
-      const newProduct = { ...productData, id: Date.now(), currency: 'USD', image: '' }
-      persistProducts([...products, newProduct])
-    }
-
-    setShowForm(false)
-    setEditingProduct(null)
-    setForm({ name: '', sku: '', description: '', category: '', price: '', stock: '', status: 'active' })
-    setErrors({})
-  }
-
-  const deleteProduct = (id) => {
-    if (!confirm('Delete this product?')) return
-    persistProducts(products.filter((p) => p.id !== id))
-  }
-
-  const duplicateProduct = (product) => {
-    const copy = {
-      ...product,
-      id: Date.now(),
-      name: product.name + ' (Copy)',
-      sku: product.sku + '-COPY',
-      stock: 0,
-      updatedAt: new Date().toISOString().slice(0, 10),
-    }
-    persistProducts([...products, copy])
-  }
-
-  const addCategory = () => {
-    const name = newCategory.trim()
-    if (!name) {
-      setCategoryError('Category name is required')
-      return
-    }
-    if (categories.some((c) => c.toLowerCase() === name.toLowerCase())) {
-      setCategoryError('Category already exists')
-      return
-    }
-    const next = [...categories, name]
-    setCategories(next)
-    saveCategories(next)
-    setNewCategory('')
-    setCategoryError('')
-  }
-
-  const renameCategory = (oldName, newName) => {
-    const name = newName.trim()
-    if (!name) return
-    if (categories.some((c) => c !== oldName && c.toLowerCase() === name.toLowerCase())) {
-      setCategoryError('Category already exists')
-      return
-    }
-    const nextCategories = categories.map((c) => (c === oldName ? name : c))
-    setCategories(nextCategories)
-    saveCategories(nextCategories)
-    persistProducts(products.map((p) => (p.category === oldName ? { ...p, category: name } : p)))
-    setCategoryError('')
-  }
-
-  const deleteCategory = (name) => {
-    const inUse = products.filter((p) => p.category === name).length
-    if (inUse > 0) {
-      setCategoryError(`"${name}" is still used by ${inUse} product(s). Reassign them before deleting.`)
-      return
-    }
-    if (!confirm(`Delete category "${name}"?`)) return
-    const next = categories.filter((c) => c !== name)
-    setCategories(next)
-    saveCategories(next)
-    setCategoryError('')
-  }
-
-  const preview = (product) => {
-    setPreviewProduct(product)
-    setShowPreview(true)
-  }
-
-  const totalProducts = products.length
-  const totalStock = products.reduce((sum, p) => sum + p.stock, 0)
-  const totalValue = products.reduce((sum, p) => sum + p.price * p.stock, 0)
-  const activeProducts = products.filter((p) => p.status === 'active').length
-  const lowStockProducts = products.filter((p) => p.stock > 0 && p.stock <= 10).length
-  const outOfStockProducts = products.filter((p) => p.stock <= 0).length
+    return true
+  })
 
   return (
-    <div className="page">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div className="flex flex-col space-y-4 text-slate-800 dark:text-slate-100">
+      {/* Page Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Catalog</h1>
-          <p className="text-gray-600 dark:text-gray-400">Manage your product catalog for WhatsApp commerce</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Catalog
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Manage your product catalog and showcase it on WhatsApp. Organize products, categories and share with customers.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => { setShowCategories(true); setCategoryError('') }}>
-            <Icon name="Folder" size={16} />
-            Categories
-          </Button>
-          <Button variant="primary" onClick={() => { setEditingProduct(null); setForm(EMPTY_FORM); setErrors({}); setShowForm(true) }}>
-            <Icon name="Plus" size={16} />
+
+        <div className="flex items-center gap-3">
+          <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 shadow-2xs">
+            <Upload className="w-3.5 h-3.5 text-slate-500" />
+            Import
+          </button>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 shadow-2xs">
+            <Download className="w-3.5 h-3.5 text-slate-500" />
+            Export
+          </button>
+          <button
+            onClick={() => {
+              setShowDrawer(true)
+              setDrawerTab('details')
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-[#00A884] hover:bg-[#008f6f] text-white rounded-xl shadow-sm transition"
+          >
+            <Plus className="w-4 h-4" />
             Add Product
-          </Button>
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Total Products</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{totalProducts}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Active Products</p>
-          <p className="text-2xl font-bold text-green-600 dark:text-green-400">{activeProducts}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Low Stock</p>
-          <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{lowStockProducts}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-gray-600 dark:text-gray-400">Out of Stock</p>
-          <p className="text-2xl font-bold text-red-600 dark:text-red-400">{outOfStockProducts}</p>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-2 text-sm text-gray-600 dark:text-gray-400">
-        <p>Units in stock: <span className="font-semibold text-gray-900 dark:text-gray-100">{totalStock}</span></p>
-        <p className="md:text-right">Inventory value: <span className="font-semibold text-gray-900 dark:text-gray-100">${totalValue.toLocaleString()}</span></p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-4 mb-6">
-        <SearchBar value={search} onChange={setSearch} placeholder="Search products..." />
-        <select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          aria-label="Filter by category"
-          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-        >
-          <option value="all">All Categories</option>
-          {categories.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
-            </option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          aria-label="Filter by status"
-          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-        >
-          <option value="all">All Status</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
-        <select
-          value={stockFilter}
-          onChange={(e) => setStockFilter(e.target.value)}
-          aria-label="Filter by stock"
-          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-        >
-          <option value="all">All Stock</option>
-          <option value="in">In stock</option>
-          <option value="low">Low stock</option>
-          <option value="out">Out of stock</option>
-        </select>
-        <Tabs
-          tabs={[
-            { id: 'table', label: 'Table' },
-            { id: 'grid', label: 'Grid' },
-          ]}
-          activeTab={view}
-          onChange={setView}
-        />
-      </div>
-
-      {view === 'table' && (
-        <Card>
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Image</th>
-                  <th>Name</th>
-                  <th>SKU</th>
-                  <th>Category</th>
-                  <th>Price</th>
-                  <th>Stock</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded flex items-center justify-center">
-                        <Icon name="Package" size={20} className="text-gray-400" />
-                      </div>
-                    </td>
-                    <td className="font-medium">{p.name}</td>
-                    <td>{p.sku}</td>
-                    <td>{p.category}</td>
-                    <td>${p.price.toFixed(2)}</td>
-                    <td>{p.stock}</td>
-                    <td>
-                      <Badge variant={p.status === 'active' ? 'success' : 'warning'}>{p.status}</Badge>
-                    </td>
-                    <td>
-                      <div className="flex gap-2">
-                        <button className="icon-btn" onClick={() => preview(p)} aria-label="Preview">
-                          <Icon name="Eye" size={16} />
-                        </button>
-                        <button className="icon-btn" onClick={() => editProduct(p)} aria-label="Edit">
-                          <Icon name="Edit" size={16} />
-                        </button>
-                        <button className="icon-btn" onClick={() => duplicateProduct(p)} aria-label="Duplicate">
-                          <Icon name="Copy" size={16} />
-                        </button>
-                        <button className="icon-btn text-red-600" onClick={() => deleteProduct(p.id)} aria-label="Delete">
-                          <Icon name="Trash2" size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {view === 'grid' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filtered.map((p) => (
-            <Card key={p.id} className="hover:shadow-md transition-shadow">
-              <div className="aspect-square bg-gray-100 dark:bg-gray-800 rounded-lg mb-3 flex items-center justify-center">
-                <Icon name="Package" size={48} className="text-gray-400" />
-              </div>
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">{p.name}</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{p.description}</p>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-lg font-bold text-brand-600 dark:text-brand-400">${p.price.toFixed(2)}</span>
-                <Badge variant={p.stock > 10 ? 'success' : p.stock > 0 ? 'warning' : 'error'}>{p.stock} in stock</Badge>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm" className="flex-1" onClick={() => editProduct(p)}>
-                  Edit
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => preview(p)}>
-                  <Icon name="Eye" size={14} />
-                </Button>
-              </div>
-            </Card>
-          ))}
+      {feedback && (
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-sm flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          {feedback}
         </div>
       )}
 
-      <Modal
-        isOpen={showForm}
-        onClose={() => { setShowForm(false); setEditingProduct(null) }}
-        title={editingProduct ? 'Edit Product' : 'Add Product'}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => { setShowForm(false); setEditingProduct(null) }}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={saveProduct}>
-              {editingProduct ? 'Update' : 'Create'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <Input label="Product Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} error={errors.name} />
-          <Input label="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} error={errors.sku} />
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
-            <select
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-            >
-              <option value="">Select category</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Price" type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} error={errors.price} />
-            <Input label="Stock" type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} error={errors.stock} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-            <select
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-            >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={showPreview}
-        onClose={() => { setShowPreview(false); setPreviewProduct(null) }}
-        title="WhatsApp Product Preview"
-        footer={
-          <Button variant="secondary" onClick={() => { setShowPreview(false); setPreviewProduct(null) }}>
-            Close
-          </Button>
-        }
-      >
-        {previewProduct && (
-          <div className="space-y-4">
-            <div className="max-w-sm mx-auto bg-gray-100 dark:bg-gray-800 rounded-lg p-4 border-4 border-gray-300 dark:border-gray-600">
-              <div className="aspect-square bg-white dark:bg-gray-700 rounded-lg mb-3 flex items-center justify-center">
-                <Icon name="Package" size={64} className="text-gray-400" />
-              </div>
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">{previewProduct.name}</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{previewProduct.description}</p>
-              <div className="flex items-center justify-between">
-                <span className="text-xl font-bold text-brand-600 dark:text-brand-400">${previewProduct.price.toFixed(2)}</span>
-                <Badge variant={previewProduct.stock > 10 ? 'success' : 'warning'}>{previewProduct.stock} available</Badge>
-              </div>
-              <Button variant="primary" className="w-full mt-3" disabled title="Cart actions are handled by the backend in production">
-                Add to Cart (preview only)
-              </Button>
+      {/* 4 KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Total Products</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-[#00A884]">
+              <Package className="w-4 h-4" />
             </div>
-            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded">
-              <p className="text-sm text-blue-800 dark:text-blue-400">
-                <Icon name="Info" size={16} className="inline mr-1" />
-                This is how the product will appear in WhatsApp messages.
-              </p>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.catalog.totalProducts.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.catalog.totalProducts.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.catalog.totalProducts.period}</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Active Products</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.catalog.activeProducts.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.catalog.activeProducts.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.catalog.activeProducts.period}</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Categories</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-[#00A884]">
+              <Folder className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.catalog.categories.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.catalog.categories.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.catalog.categories.period}</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Total Views</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600">
+              <Eye className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.catalog.totalViews.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.catalog.totalViews.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.catalog.totalViews.period}</p>
+        </div>
+      </div>
+
+      {/* Subtabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+        {['All Products', 'Categories', 'Collections', 'Pricing', 'Stock Alerts'].map((tab) => {
+          const key = tab.toLowerCase().split(' ')[0]
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(key)}
+              className={`px-3 py-1 text-sm font-medium rounded-lg transition ${
+                activeTab === key
+                  ? 'bg-[#00A884]/10 text-[#00A884]'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              {tab}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Main Grid & Slide-over Drawer */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* Product Cards Grid Area */}
+        <div className={`${showDrawer ? 'lg:col-span-8' : 'lg:col-span-12'} bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-4`}>
+          {/* Filters */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="relative flex-1 min-w-[220px]">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search products by name, SKU or category..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#00A884]"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 text-xs">
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-600 dark:text-slate-300"
+              >
+                <option>All Categories</option>
+                <option>Footwear</option>
+                <option>Electronics</option>
+                <option>Fashion</option>
+                <option>Bags</option>
+                <option>Accessories</option>
+                <option>Beauty</option>
+              </select>
+
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-600 dark:text-slate-300"
+              >
+                <option>All Status</option>
+                <option>In Stock</option>
+                <option>Low Stock</option>
+              </select>
+
+              <select className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-600 dark:text-slate-300">
+                <option>Sort by: Newest</option>
+                <option>Sort by: Price Low to High</option>
+                <option>Sort by: Price High to Low</option>
+              </select>
+
+              <button className="flex items-center gap-1 px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50">
+                <Filter className="w-3.5 h-3.5 text-slate-500" />
+                Filter
+              </button>
+            </div>
+          </div>
+
+          {/* Cards Grid (4 across) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            {filteredProducts.map((p) => {
+              const isSelected = p.id === selectedProduct.id
+              return (
+                <div
+                  key={p.id}
+                  onClick={() => {
+                    setSelectedProductId(p.id)
+                    setShowDrawer(true)
+                  }}
+                  className={`group rounded-2xl border transition overflow-hidden bg-white dark:bg-slate-900 cursor-pointer flex flex-col justify-between shadow-2xs hover:shadow-md ${
+                    isSelected
+                      ? 'border-[#00A884] ring-2 ring-[#00A884]/20'
+                      : 'border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  {/* Image area */}
+                  <div className="relative aspect-square w-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <img
+                      src={p.image}
+                      alt={p.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                    />
+                    <input
+                      type="checkbox"
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute top-2 left-2 rounded accent-[#00A884]"
+                    />
+                  </div>
+
+                  {/* Details area */}
+                  <div className="p-3 text-xs flex-1 flex flex-col justify-between">
+                    <div>
+                      <h4 className="font-bold text-slate-900 dark:text-white truncate">
+                        {p.name}
+                      </h4>
+                      <p className="text-[11px] text-slate-400">{p.category}</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white mt-1">
+                        {p.price}
+                      </p>
+                    </div>
+
+                    <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                      <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        Active
+                      </span>
+
+                      <div className="flex items-center gap-1 text-slate-400">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedProductId(p.id)
+                            setShowDrawer(true)
+                          }}
+                          className="p-1 hover:text-slate-600 rounded"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1 hover:text-slate-600 rounded"
+                        >
+                          <MoreVertical className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Pagination */}
+          <div className="flex items-center justify-between pt-4 mt-2 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-400">
+            <span>Show 12 per page ▾</span>
+            <div className="flex items-center gap-1">
+              <button className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button className="w-6 h-6 rounded bg-[#00A884] text-white font-bold text-xs flex items-center justify-center">
+                1
+              </button>
+              <button className="w-6 h-6 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-xs flex items-center justify-center">
+                2
+              </button>
+              <button className="w-6 h-6 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-xs flex items-center justify-center">
+                3
+              </button>
+              <button className="w-6 h-6 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-xs flex items-center justify-center">
+                4
+              </button>
+              <button className="w-6 h-6 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-xs flex items-center justify-center">
+                5
+              </button>
+              <span>...</span>
+              <button className="px-1 text-xs">13</button>
+              <button className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Drawer: Product Details & WhatsApp Preview */}
+        {showDrawer && (
+          <div className="lg:col-span-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-lg space-y-4 animate-fadeIn">
+            {/* Drawer Tabs */}
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex gap-2">
+                {['Product Details', 'Categories', 'Share'].map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setDrawerTab(t.toLowerCase().split(' ')[0])}
+                    className={`text-xs font-semibold pb-1 transition ${
+                      drawerTab === t.toLowerCase().split(' ')[0]
+                        ? 'text-[#00A884] border-b-2 border-[#00A884]'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setShowDrawer(false)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  {selectedProduct.name}
+                </span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  Product Name *
+                </label>
+                <input
+                  type="text"
+                  defaultValue={selectedProduct.name}
+                  className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  Description
+                </label>
+                <textarea
+                  rows={3}
+                  defaultValue={selectedProduct.desc}
+                  className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 leading-relaxed text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                    Price (USD) *
+                  </label>
+                  <input
+                    type="text"
+                    defaultValue={selectedProduct.price}
+                    className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                    SKU
+                  </label>
+                  <input
+                    type="text"
+                    defaultValue={selectedProduct.sku}
+                    className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                    Stock Quantity
+                  </label>
+                  <input
+                    type="number"
+                    defaultValue={120}
+                    className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                    Status
+                  </label>
+                  <select className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                    <option>In Stock</option>
+                    <option>Out of Stock</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Media gallery */}
+              <div>
+                <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                  Media
+                </label>
+                <div className="flex gap-2">
+                  <img
+                    src={selectedProduct.image}
+                    alt=""
+                    className="w-12 h-12 rounded-lg object-cover border border-slate-200 dark:border-slate-700"
+                  />
+                  <div className="w-12 h-12 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 cursor-pointer">
+                    <Plus className="w-4 h-4" />
+                    <span className="text-[8px]">Add</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSaveProduct}
+                className="w-full py-2 bg-[#00A884] hover:bg-[#008f6f] text-white font-semibold rounded-xl text-xs shadow-xs transition"
+              >
+                Save Product
+              </button>
+            </div>
+
+            {/* WhatsApp Phone Preview */}
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-[11px] font-bold text-slate-500 block mb-2">
+                WhatsApp Preview
+              </span>
+
+              <div className="rounded-2xl border-4 border-slate-800 bg-[#EFEAE2] dark:bg-slate-950 overflow-hidden shadow-inner">
+                {/* Header */}
+                <div className="bg-[#008069] text-white p-2.5 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs">
+                    B
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-bold leading-none">Your Business</h5>
+                    <span className="text-[9px] text-emerald-200">Business Account</span>
+                  </div>
+                </div>
+
+                {/* Catalog Card bubble */}
+                <div className="p-3">
+                  <div className="bg-white dark:bg-slate-900 rounded-xl overflow-hidden shadow-xs border border-slate-200/60 dark:border-slate-800 max-w-[90%] text-xs">
+                    <img
+                      src={selectedProduct.image}
+                      alt={selectedProduct.name}
+                      className="w-full h-32 object-cover"
+                    />
+                    <div className="p-2.5">
+                      <h4 className="font-bold text-slate-900 dark:text-white">
+                        {selectedProduct.name}
+                      </h4>
+                      <p className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">
+                        {selectedProduct.price}
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-1 line-clamp-2">
+                        {selectedProduct.desc}
+                      </p>
+
+                      <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
+                        <button className="w-full py-1 text-center font-bold text-[#00A884] text-[11px] flex items-center justify-center gap-1 hover:bg-emerald-50 rounded">
+                          <ShoppingBag className="w-3 h-3" /> Buy Now
+                        </button>
+                        <button className="w-full py-1 text-center font-semibold text-slate-600 dark:text-slate-300 text-[10px] flex items-center justify-center gap-1">
+                          <ExternalLink className="w-3 h-3" /> View Details
+                        </button>
+                        <button className="w-full py-1 text-center font-semibold text-slate-600 dark:text-slate-300 text-[10px] flex items-center justify-center gap-1">
+                          <Share2 className="w-3 h-3" /> Share
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
-      </Modal>
-      <Modal
-        isOpen={showCategories}
-        onClose={() => { setShowCategories(false); setCategoryError('') }}
-        title="Manage Categories"
-        footer={
-          <Button variant="secondary" onClick={() => { setShowCategories(false); setCategoryError('') }}>
-            Close
-          </Button>
-        }
-      >
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <input
-              value={newCategory}
-              onChange={(e) => { setNewCategory(e.target.value); setCategoryError('') }}
-              placeholder="New category name"
-              aria-label="New category name"
-              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-            />
-            <Button variant="primary" onClick={addCategory}>
-              Add
-            </Button>
-          </div>
-          {categoryError && <p className="error">{categoryError}</p>}
-          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-            {categories.map((cat) => (
-              <li key={cat} className="flex items-center gap-2 py-2">
-                <input
-                  defaultValue={cat}
-                  aria-label={`Rename ${cat}`}
-                  onBlur={(e) => renameCategory(cat, e.target.value)}
-                  className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                />
-                <span className="text-xs text-gray-500">{products.filter((p) => p.category === cat).length} product(s)</span>
-                <button className="icon-btn text-red-600" onClick={() => deleteCategory(cat)} aria-label={`Delete ${cat}`}>
-                  <Icon name="Trash2" size={16} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Modal>
+      </div>
     </div>
   )
 }

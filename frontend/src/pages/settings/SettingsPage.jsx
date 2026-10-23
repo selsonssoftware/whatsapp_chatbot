@@ -1,355 +1,571 @@
 import { useState } from 'react'
-import { Card, Button, Input, Tabs, Icon, Badge } from '../../components/index.js'
-import { resetSeedData, getStoredSeedData } from '../../services/seedDataService.js'
-
-const DEFAULT_SETTINGS = {
-  general: { workspaceName: 'My Workspace', timezone: 'UTC', language: 'en' },
-  whatsapp: { phoneNumber: '', businessName: '', description: '' },
-  messaging: { defaultTemplate: '', autoReply: false, workingHours: '9:00-18:00' },
-  team: { requireApproval: false, maxConversations: 10 },
-  notifications: { emailAlerts: true, inAppAlerts: true },
-  security: { twoFactorAuth: false, sessionTimeout: 30 },
-  billing: { plan: 'Free', renewalDate: '2026-02-17' },
-  privacy: { dataRetention: 90, anonymizeData: false },
-}
+import {
+  Settings,
+  Building,
+  Globe,
+  Clock,
+  ShieldCheck,
+  CheckCircle2,
+  Edit2,
+  Save,
+  MessageSquare,
+  Bell,
+  Lock,
+  CreditCard,
+  Database,
+  Sliders,
+  Check,
+} from 'lucide-react'
+import { SETTINGS_CONFIG } from '../../data/mockBlastData.js'
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general')
-  const [settings, setSettings] = useState(() => {
-    try {
-      const raw = localStorage.getItem('wa_settings')
-      if (!raw) return DEFAULT_SETTINGS
-      const parsed = JSON.parse(raw)
-      return { ...DEFAULT_SETTINGS, ...parsed }
-    } catch {
-      return DEFAULT_SETTINGS
-    }
-  })
-  const [saveStatus, setSaveStatus] = useState('')
-  const [seedData, setSeedData] = useState(() => getStoredSeedData())
+  const [profile, setProfile] = useState(SETTINGS_CONFIG.profile)
+  const [company, setCompany] = useState(SETTINGS_CONFIG.company)
+  const [preferences, setPreferences] = useState(SETTINGS_CONFIG.preferences)
+  const [businessHours, setBusinessHours] = useState(SETTINGS_CONFIG.businessHours)
+  const [awayMessage, setAwayMessage] = useState(SETTINGS_CONFIG.awayMessage)
+  const [dataRetention, setDataRetention] = useState(SETTINGS_CONFIG.dataRetention)
+  const [feedback, setFeedback] = useState(null)
 
-  const updateSetting = (section, key, value) => {
-    setSettings((prev) => ({ ...prev, [section]: { ...prev[section], [key]: value } }))
+  const handleSave = (msg = 'Settings saved successfully!') => {
+    setFeedback(msg)
+    setTimeout(() => setFeedback(null), 3000)
   }
 
-  const saveSettings = () => {
-    try {
-      localStorage.setItem('wa_settings', JSON.stringify(settings))
-    } catch {
-      setSaveStatus('Could not save settings in this browser')
-      return
-    }
-    setSaveStatus('Saved!')
-    setTimeout(() => setSaveStatus(''), 2000)
+  const togglePreference = (key) => {
+    setPreferences((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
-  const handleResetSeedData = () => {
-    if (!confirm('Reset all local data? Products, orders, payments, templates, chatbots, AI agents, flows and settings will return to their seeded values. This cannot be undone.'))
-      return
-    resetSeedData()
-    setSeedData(getStoredSeedData())
-    setSettings(DEFAULT_SETTINGS)
-    setSaveStatus('Local data reset to the seeded values. Reload the page to see them in every module.')
-    setTimeout(() => setSaveStatus(''), 4000)
+  const toggleDay = (idx) => {
+    setBusinessHours((prev) =>
+      prev.map((d, i) => (i === idx ? { ...d, active: !d.active } : d))
+    )
   }
 
   return (
-    <div className="page">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Settings</h1>
-        <p className="text-gray-600 dark:text-gray-400">Configure your workspace and preferences</p>
+    <div className="flex flex-col space-y-4 text-slate-800 dark:text-slate-100">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Settings
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Manage your account, WhatsApp Business API, preferences and system configuration.
+          </p>
+        </div>
+
+        {feedback && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 rounded-lg text-sm border border-emerald-300 dark:border-emerald-800 animate-fadeIn">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            {feedback}
+          </div>
+        )}
       </div>
 
-      <Tabs
-        tabs={[
-          { id: 'general', label: 'General' },
-          { id: 'whatsapp', label: 'WhatsApp Business' },
-          { id: 'messaging', label: 'Messaging' },
-          { id: 'team', label: 'Team' },
-          { id: 'notifications', label: 'Notifications' },
-          { id: 'security', label: 'Security' },
-          { id: 'billing', label: 'Billing' },
-          { id: 'privacy', label: 'Data & Privacy' },
-          { id: 'data', label: 'Local Data' },
-        ]}
-        activeTab={activeTab}
-        onChange={setActiveTab}
-      />
+      {/* Top Navigation Tabs */}
+      <div className="flex items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto text-xs font-medium">
+        {[
+          { key: 'general', label: 'General' },
+          { key: 'whatsapp', label: 'WhatsApp Business' },
+          { key: 'messaging', label: 'Messaging' },
+          { key: 'team', label: 'Team & Permissions' },
+          { key: 'integrations', label: 'Integrations' },
+          { key: 'notifications', label: 'Notifications' },
+          { key: 'security', label: 'Security' },
+          { key: 'billing', label: 'Billing & Subscription' },
+          { key: 'privacy', label: 'Data & Privacy' },
+          { key: 'advanced', label: 'Advanced' },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition ${
+              activeTab === tab.key
+                ? 'bg-[#00A884]/10 text-[#00A884] font-bold'
+                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      <div className="mt-6 space-y-6">
-        {activeTab === 'general' && (
-          <Card title="General Settings">
-            <div className="space-y-4">
-              <Input label="Workspace Name" value={settings.general.workspaceName} onChange={(e) => updateSetting('general', 'workspaceName', e.target.value)} />
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Timezone</label>
-                <select
-                  value={settings.general.timezone}
-                  onChange={(e) => updateSetting('general', 'timezone', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                >
-                  <option value="UTC">UTC</option>
-                  <option value="America/New_York">America/New_York</option>
-                  <option value="Europe/London">Europe/London</option>
-                  <option value="Asia/Kolkata">Asia/Kolkata</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Language</label>
-                <select
-                  value={settings.general.language}
-                  onChange={(e) => updateSetting('general', 'language', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                >
-                  <option value="en">English</option>
-                  <option value="es">Spanish</option>
-                  <option value="fr">French</option>
-                  <option value="de">German</option>
-                </select>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {activeTab === 'whatsapp' && (
-          <Card title="WhatsApp Business Settings">
-            <div className="space-y-4">
-              <Input label="Phone Number" value={settings.whatsapp.phoneNumber} onChange={(e) => updateSetting('whatsapp', 'phoneNumber', e.target.value)} placeholder="+1234567890" />
-              <Input label="Business Name" value={settings.whatsapp.businessName} onChange={(e) => updateSetting('whatsapp', 'businessName', e.target.value)} />
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Business Description</label>
-                <textarea
-                  value={settings.whatsapp.description}
-                  onChange={(e) => updateSetting('whatsapp', 'description', e.target.value)}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                />
-              </div>
-              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded">
-                <p className="text-sm text-amber-800 dark:text-amber-400">
-                  <Icon name="Info" size={16} className="inline mr-1" />
-                  Configure WhatsApp Business API in Integrations section.
-                </p>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {activeTab === 'messaging' && (
-          <Card title="Messaging Settings">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Default Template</label>
-                <select
-                  value={settings.messaging.defaultTemplate}
-                  onChange={(e) => updateSetting('messaging', 'defaultTemplate', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                >
-                  <option value="">None</option>
-                  <option value="1">Welcome Template</option>
-                  <option value="2">Order Update Template</option>
-                </select>
-              </div>
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="autoReply"
-                  checked={settings.messaging.autoReply}
-                  onChange={(e) => updateSetting('messaging', 'autoReply', e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <label htmlFor="autoReply" className="text-sm text-gray-700 dark:text-gray-300">Enable Auto-Reply</label>
-              </div>
-              <Input label="Working Hours" value={settings.messaging.workingHours} onChange={(e) => updateSetting('messaging', 'workingHours', e.target.value)} placeholder="9:00-18:00" />
-            </div>
-          </Card>
-        )}
-
-        {activeTab === 'team' && (
-          <Card title="Team Settings">
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="approval"
-                  checked={settings.team.requireApproval}
-                  onChange={(e) => updateSetting('team', 'requireApproval', e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <label htmlFor="approval" className="text-sm text-gray-700 dark:text-gray-300">Require Approval for Campaigns</label>
-              </div>
-              <Input label="Max Concurrent Conversations per Agent" type="number" value={settings.team.maxConversations} onChange={(e) => updateSetting('team', 'maxConversations', e.target.value)} />
-            </div>
-          </Card>
-        )}
-
-        {activeTab === 'notifications' && (
-          <Card title="Notification Settings">
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="emailAlerts"
-                  checked={settings.notifications.emailAlerts}
-                  onChange={(e) => updateSetting('notifications', 'emailAlerts', e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <label htmlFor="emailAlerts" className="text-sm text-gray-700 dark:text-gray-300">Email Alerts</label>
-              </div>
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="inAppAlerts"
-                  checked={settings.notifications.inAppAlerts}
-                  onChange={(e) => updateSetting('notifications', 'inAppAlerts', e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <label htmlFor="inAppAlerts" className="text-sm text-gray-700 dark:text-gray-300">In-App Notifications</label>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {activeTab === 'security' && (
-          <Card title="Security Settings">
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="2fa"
-                  checked={settings.security.twoFactorAuth}
-                  onChange={(e) => updateSetting('security', 'twoFactorAuth', e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <label htmlFor="2fa" className="text-sm text-gray-700 dark:text-gray-300">Two-Factor Authentication</label>
-              </div>
-              <Input label="Session Timeout (minutes)" type="number" value={settings.security.sessionTimeout} onChange={(e) => updateSetting('security', 'sessionTimeout', e.target.value)} />
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setSaveStatus('Password changes are handled by the backend')
-                  setTimeout(() => setSaveStatus(''), 3000)
-                }}
+      {/* 3 Columns Layout matching Screenshot 17 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        {/* Column 1: Business Profile & Company Details & Hours */}
+        <div className="space-y-4">
+          {/* Business Profile Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-3 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">Business Profile</h3>
+              <button
+                onClick={() => handleSave('Business profile updated!')}
+                className="flex items-center gap-1 text-[#00A884] font-semibold hover:underline"
               >
-                Change Password (backend only)
-              </Button>
+                <Edit2 className="w-3.5 h-3.5" /> Edit
+              </button>
             </div>
-          </Card>
-        )}
 
-        {activeTab === 'billing' && (
-          <Card title="Billing & Subscription">
-            <div className="space-y-4">
-              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-medium text-gray-900 dark:text-gray-100">Current Plan</span>
-                  <Badge variant="info">{settings.billing.plan}</Badge>
+            <div className="flex items-start gap-3 pt-1">
+              <div className="w-14 h-14 rounded-2xl bg-[#00A884]/10 border border-[#00A884]/20 flex items-center justify-center font-bold text-xl text-[#00A884] shrink-0">
+                🏢
+              </div>
+              <div className="flex-1 space-y-2">
+                <div>
+                  <label className="text-[10px] text-slate-400 block">Business Name *</label>
+                  <input
+                    type="text"
+                    value={profile.name}
+                    onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))}
+                    className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 font-semibold text-slate-900 dark:text-white"
+                  />
                 </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Renewal Date: {settings.billing.renewalDate}</p>
+                <div>
+                  <label className="text-[10px] text-slate-400 block">Description</label>
+                  <input
+                    type="text"
+                    value={profile.description}
+                    onChange={(e) => setProfile((p) => ({ ...p, description: e.target.value }))}
+                    className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                  />
+                </div>
               </div>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setSaveStatus('Plan upgrades are handled by the backend')
-                  setTimeout(() => setSaveStatus(''), 3000)
-                }}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div>
+                <label className="text-[10px] text-slate-400 block">Website</label>
+                <input
+                  type="text"
+                  value={profile.website}
+                  onChange={(e) => setProfile((p) => ({ ...p, website: e.target.value }))}
+                  className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-[11px]"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 block">Email</label>
+                <input
+                  type="text"
+                  value={profile.email}
+                  onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))}
+                  className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-[11px]"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] text-slate-400 block">Phone</label>
+              <input
+                type="text"
+                value={profile.phone}
+                onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))}
+                className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-[11px]"
+              />
+            </div>
+          </div>
+
+          {/* Company Details Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-3 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">Company Details</h3>
+              <button
+                onClick={() => handleSave('Company details saved!')}
+                className="flex items-center gap-1 text-[#00A884] font-semibold hover:underline"
               >
-                Upgrade Plan (backend only)
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setSaveStatus('Payment history is provided by the backend')
-                  setTimeout(() => setSaveStatus(''), 3000)
-                }}
+                <Edit2 className="w-3.5 h-3.5" /> Edit
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-slate-400 block">Company Name *</label>
+                <input
+                  type="text"
+                  defaultValue={company.name}
+                  className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 font-medium"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 block">Industry</label>
+                <select className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                  <option>E-commerce</option>
+                  <option>Retail</option>
+                  <option>Healthcare</option>
+                  <option>Education</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] text-slate-400 block">Address</label>
+              <textarea
+                rows={2}
+                defaultValue={company.address}
+                className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 leading-relaxed text-xs"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-slate-400 block">GST / Tax ID (Optional)</label>
+                <input
+                  type="text"
+                  defaultValue={company.gstTaxId}
+                  className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 font-mono text-[11px]"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 block">Support Phone</label>
+                <input
+                  type="text"
+                  defaultValue={company.supportPhone}
+                  className="w-full p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 text-[11px]"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Business Hours Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-3 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">Business Hours</h3>
+                <p className="text-[10px] text-slate-400">Set your availability hours for customer support.</p>
+              </div>
+              <button
+                onClick={() => handleSave('Business hours updated!')}
+                className="flex items-center gap-1 text-[#00A884] font-semibold hover:underline"
               >
-                View Payment History (backend only)
-              </Button>
-              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded">
-                <p className="text-sm text-amber-800 dark:text-amber-400">
-                  <Icon name="Info" size={16} className="inline mr-1" />
-                  Simulation: no actual billing or payment processing.
+                <Edit2 className="w-3.5 h-3.5" /> Edit
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              {businessHours.map((d, idx) => (
+                <div key={d.day} className="flex items-center justify-between py-1 text-[11px]">
+                  <label className="flex items-center gap-2 cursor-pointer w-28">
+                    <input
+                      type="checkbox"
+                      checked={d.active}
+                      onChange={() => toggleDay(idx)}
+                      className="rounded accent-[#00A884]"
+                    />
+                    <span className="font-medium text-slate-700 dark:text-slate-300">{d.day}</span>
+                  </label>
+
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[10px]">
+                      {d.active ? d.start : 'Closed'}
+                    </span>
+                    <span className="text-slate-400">-</span>
+                    <span className="px-2 py-0.5 rounded bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[10px]">
+                      {d.active ? d.end : 'Closed'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Column 2: Time Zone, Preferences & Away Message */}
+        <div className="space-y-4">
+          {/* Time Zone & Language */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-3 text-xs">
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white pb-2 border-b border-slate-100 dark:border-slate-800">
+              Time Zone & Language
+            </h3>
+
+            <div>
+              <label className="text-slate-500 block mb-1">Time Zone</label>
+              <select className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                <option>(GMT+05:30) India Standard Time (IST)</option>
+                <option>(GMT+00:00) UTC</option>
+                <option>(GMT-05:00) Eastern Time (US & Canada)</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-slate-500 block mb-1">Date Format</label>
+                <select className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                  <option>DD/MM/YYYY</option>
+                  <option>MM/DD/YYYY</option>
+                  <option>YYYY-MM-DD</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-slate-500 block mb-1">Language</label>
+                <select className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                  <option>English</option>
+                  <option>Spanish</option>
+                  <option>French</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              onClick={() => handleSave('Time zone settings saved!')}
+              className="w-full py-2 bg-[#00A884] hover:bg-[#008f6f] text-white font-semibold rounded-xl text-xs shadow-xs transition"
+            >
+              Save Changes
+            </button>
+          </div>
+
+          {/* Preferences */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-3 text-xs">
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white pb-2 border-b border-slate-100 dark:border-slate-800">
+              Preferences
+            </h3>
+
+            <div className="space-y-2.5">
+              {[
+                { key: 'autoAssign', label: 'Auto-assign new conversations' },
+                { key: 'notificationSound', label: 'Play notification sound' },
+                { key: 'showMessagePreview', label: 'Show message preview' },
+                { key: 'compactView', label: 'Compact view' },
+                { key: 'linkShortening', label: 'Enable link shortening' },
+                { key: 'trackAnalytics', label: 'Track message analytics' },
+                { key: 'saveSentHistory', label: 'Save sent message history' },
+              ].map(({ key, label }) => (
+                <div key={key} className="flex items-center justify-between">
+                  <span className="text-slate-600 dark:text-slate-300 font-medium">{label}</span>
+                  <button
+                    type="button"
+                    onClick={() => togglePreference(key)}
+                    className={`w-8 h-4.5 rounded-full transition relative ${
+                      preferences[key] ? 'bg-[#00A884]' : 'bg-slate-300 dark:bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition ${
+                        preferences[key] ? 'translate-x-3.5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Away Message Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-3 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">Away Message</h3>
+                <p className="text-[10px] text-slate-400">
+                  Automatically reply when you are outside business hours.
                 </p>
               </div>
-            </div>
-          </Card>
-        )}
 
-        {activeTab === 'privacy' && (
-          <Card title="Data & Privacy">
-            <div className="space-y-4">
-              <Input label="Data Retention Period (days)" type="number" value={settings.privacy.dataRetention} onChange={(e) => updateSetting('privacy', 'dataRetention', e.target.value)} />
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="anonymize"
-                  checked={settings.privacy.anonymizeData}
-                  onChange={(e) => updateSetting('privacy', 'anonymizeData', e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <label htmlFor="anonymize" className="text-sm text-gray-700 dark:text-gray-300">Anonymize Old Data</label>
-              </div>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' })
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url
-                  a.download = 'settings.json'
-                  a.click()
-                  URL.revokeObjectURL(url)
-                  setSaveStatus('Settings exported (JSON)')
-                  setTimeout(() => setSaveStatus(''), 3000)
-                }}
+              <button
+                type="button"
+                onClick={() =>
+                  setAwayMessage((p) => ({ ...p, enabled: !p.enabled }))
+                }
+                className={`w-8 h-4.5 rounded-full transition relative ${
+                  awayMessage.enabled ? 'bg-[#00A884]' : 'bg-slate-300 dark:bg-slate-700'
+                }`}
               >
-                Export Settings
-              </Button>
-              <Button variant="danger" disabled title="Account deletion is handled by the backend and is not available yet">
-                Delete Account (backend only)
-              </Button>
+                <span
+                  className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition ${
+                    awayMessage.enabled ? 'translate-x-3.5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
             </div>
-          </Card>
-        )}
 
-        {activeTab === 'data' && (
-          <Card title="Local Data">
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                All records are stored in this browser&apos;s localStorage. They survive a page refresh and are never sent to a
-                server. Resetting restores the seeded values and keeps your session and theme preference.
-              </p>
-              <div className="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Store</th>
-                      <th>Records</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {seedData.map((entry) => (
-                      <tr key={entry.key}>
-                        <td className="font-mono text-xs">{entry.key}</td>
-                        <td>{entry.records}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div>
+              <label className="text-[10px] text-slate-400 block mb-1">Message Template</label>
+              <textarea
+                rows={3}
+                value={awayMessage.text}
+                onChange={(e) => setAwayMessage((p) => ({ ...p, text: e.target.value }))}
+                className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 leading-relaxed text-xs font-mono"
+              />
+              <span className="text-[10px] text-slate-400 mt-1 block">{`{{customer_name}}`}</span>
+            </div>
+
+            <button
+              onClick={() => handleSave('Away message updated!')}
+              className="w-full py-2 bg-[#00A884] hover:bg-[#008f6f] text-white font-semibold rounded-xl text-xs shadow-xs transition"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+
+        {/* Column 3: Account Status, Default Settings, Data Retention */}
+        <div className="space-y-4">
+          {/* Account Status Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-3 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">Account Status</h3>
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-500">
+              Your account is active and all systems are working properly.
+            </p>
+
+            <div className="space-y-2 pt-1">
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">WABA Number</span>
+                <span className="font-mono font-bold text-slate-900 dark:text-white">
+                  +1 555 123 4567
+                </span>
               </div>
-              <Button variant="danger" onClick={handleResetSeedData}>
-                <Icon name="Trash2" size={16} />
-                Reset Local Data
-              </Button>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Business Verification</span>
+                <span className="font-semibold text-emerald-600 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Verified
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Phone Number Status</span>
+                <span className="font-semibold text-emerald-600 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Connected
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-slate-400">Messaging Tier</span>
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                  MSG_LIMIT
+                </span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-400">Quality Rating</span>
+                <span className="font-bold text-emerald-600 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> High
+                </span>
+              </div>
             </div>
-          </Card>
-        )}
+          </div>
 
-        <div className="flex justify-end gap-2">
-          <span className={saveStatus === 'Saved!' ? 'text-green-600 dark:text-green-400 self-center' : 'text-gray-600 dark:text-gray-400 self-center'}>{saveStatus}</span>
-          <Button variant="primary" onClick={saveSettings}>
-            Save Changes
-          </Button>
+          {/* Default Settings */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-3 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">Default Settings</h3>
+              <button
+                onClick={() => handleSave('Defaults saved!')}
+                className="flex items-center gap-1 text-[#00A884] font-semibold hover:underline"
+              >
+                <Edit2 className="w-3.5 h-3.5" /> Edit
+              </button>
+            </div>
+
+            <div>
+              <label className="text-slate-500 block mb-1">
+                Default Message Template Language
+              </label>
+              <select className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                <option>English (en_US)</option>
+                <option>Spanish (es_ES)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-slate-500 block mb-1">Default Sender Number</label>
+              <select className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 font-mono">
+                <option>+1 555 123 4567</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-slate-500 block mb-1">Default Team</label>
+              <select className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                <option>Support</option>
+                <option>Sales</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-slate-500 block mb-1">Default Assignment Rule</label>
+              <select className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800">
+                <option>Round Robin</option>
+                <option>Load Balanced</option>
+                <option>Manual Only</option>
+              </select>
+            </div>
+
+            <button
+              onClick={() => handleSave('Defaults saved!')}
+              className="w-full py-2 bg-[#00A884] hover:bg-[#008f6f] text-white font-semibold rounded-xl text-xs shadow-xs transition"
+            >
+              Save Changes
+            </button>
+          </div>
+
+          {/* Data Retention */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-3 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">Data Retention</h3>
+              <button
+                onClick={() => handleSave('Retention policies updated!')}
+                className="flex items-center gap-1 text-[#00A884] font-semibold hover:underline"
+              >
+                <Edit2 className="w-3.5 h-3.5" /> Edit
+              </button>
+            </div>
+
+            <div>
+              <label className="text-slate-500 block mb-1">Keep message history for</label>
+              <select
+                value={dataRetention.messageHistory}
+                onChange={(e) =>
+                  setDataRetention((p) => ({ ...p, messageHistory: e.target.value }))
+                }
+                className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800"
+              >
+                <option>12 Months</option>
+                <option>6 Months</option>
+                <option>24 Months</option>
+                <option>Indefinite</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-slate-500 block mb-1">Auto-delete logs older than</label>
+              <select
+                value={dataRetention.autoDeleteLogs}
+                onChange={(e) =>
+                  setDataRetention((p) => ({ ...p, autoDeleteLogs: e.target.value }))
+                }
+                className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800"
+              >
+                <option>6 Months</option>
+                <option>3 Months</option>
+                <option>12 Months</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-slate-500 block mb-1">Keep contact data for</label>
+              <select
+                value={dataRetention.contactData}
+                onChange={(e) =>
+                  setDataRetention((p) => ({ ...p, contactData: e.target.value }))
+                }
+                className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800"
+              >
+                <option>24 Months</option>
+                <option>12 Months</option>
+                <option>Indefinite</option>
+              </select>
+            </div>
+
+            <button
+              onClick={() => handleSave('Data retention policy saved!')}
+              className="w-full py-2 bg-[#00A884] hover:bg-[#008f6f] text-white font-semibold rounded-xl text-xs shadow-xs transition"
+            >
+              Save Changes
+            </button>
+          </div>
         </div>
       </div>
     </div>

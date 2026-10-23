@@ -8,7 +8,7 @@ seeded data in the browser.
 ![React](https://img.shields.io/badge/React-19-61dafb)
 ![Vite](https://img.shields.io/badge/Vite-8-646cff)
 ![Tailwind](https://img.shields.io/badge/Tailwind-3-38bdf8)
-![Tests](https://img.shields.io/badge/tests-56%20passing-25c366)
+![Tests](https://img.shields.io/badge/tests-86%20passing-25c366)
 
 ---
 
@@ -26,7 +26,7 @@ npm run dev        # http://localhost:5173
 | `npm run build` | Production build into `frontend/dist` |
 | `npm run preview` | Serve the production build locally |
 | `npm run lint` | ESLint over the whole frontend |
-| `npm test` | Vitest unit suite (56 tests) |
+| `npm test` | Vitest unit suite (86 tests) |
 | `npm run test:watch` | Vitest in watch mode |
 | `npm run test:coverage` | Vitest with V8 coverage |
 
@@ -58,6 +58,7 @@ Support) — each role sees a different navigation scope.
 | Schedule Logs | `/schedule-logs` | Scheduled job history |
 | Integrations | `/integrations` | Provider configuration with masked secrets |
 | Team & Roles | `/team` | Member list, role filter, invitation flow |
+| Supporters | `/supporters` | Supporter directory (admin/manager only) with shift, language and status tracking |
 | Settings | `/settings` | Workspace, messaging, team, security, billing, privacy and local data |
 
 ---
@@ -145,10 +146,10 @@ npm test
 
 The suite covers the service layer where the rules live: order validation and
 totals, order status transitions, workflow validation and run simulation, AI
-knowledge matching and handoff thresholds, flow/chatbot validation, and the
-seed-data store. Component tests cover the error boundary, the modal
-dialog behaviour (focus handling, Escape, scroll lock) and the tablist
-keyboard pattern.
+knowledge matching and handoff thresholds, flow/chatbot validation, the
+supporter directory rules and the seed-data store. Component tests cover the
+error boundary, the modal dialog behaviour (focus handling, Escape, scroll
+lock), the tablist keyboard pattern and the supporter page permissions.
 
 ---
 

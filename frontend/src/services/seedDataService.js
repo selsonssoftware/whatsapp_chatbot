@@ -6,6 +6,7 @@ import { getAutomations } from './automationService.js'
 import { getChatbots } from './chatbotService.js'
 import { getAgents, getAgentTests } from './aiAgentService.js'
 import { getFlows, getFlowSubmissions } from './flowsService.js'
+import { getSupporters } from './supporterService.js'
 
 export const SEED_STORAGE_KEYS = {
   products: 'wa_products',
@@ -20,6 +21,9 @@ export const SEED_STORAGE_KEYS = {
   aiAgentTests: 'wa_ai_agent_tests',
   flows: 'wa_flows',
   flowSubmissions: 'wa_flow_submissions',
+  supporters: 'wa_supporters',
+  demoConversations: 'wa_demo_conversations',
+  demoMessages: 'wa_demo_messages',
   integrations: 'wa_integration_settings',
   settings: 'wa_settings',
 }
@@ -28,8 +32,10 @@ export const SEED_STORAGE_KEYS = {
  * Keys that are intentionally preserved when the stored data is reset:
  * - wa_session keeps the signed-in user
  * - theme keeps the light/dark preference
+ * - wa_admin_accounts keeps the registered admin accounts so a reset never
+ *   locks the workspace owner out
  */
-export const PRESERVED_STORAGE_KEYS = ['wa_session', 'theme']
+export const PRESERVED_STORAGE_KEYS = ['wa_session', 'theme', 'wa_admin_accounts']
 
 export function listSeedDataKeys() {
   return Object.values(SEED_STORAGE_KEYS).filter((key) => !PRESERVED_STORAGE_KEYS.includes(key))
@@ -57,6 +63,7 @@ export function reseedSeedData() {
   getAgentTests()
   getFlows()
   getFlowSubmissions()
+  getSupporters()
 }
 
 export function getStoredSeedData() {

@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   MessageSquare,
+  Inbox,
   Send,
   Users,
   TrendingUp,
@@ -52,11 +53,22 @@ import {
   Layout,
   Zap,
   Printer,
+  Folder,
+  Save,
+  HelpCircle,
+  Webhook,
+  UserPlus,
+  UserCheck,
+  Building2,
+  Layers,
+  SlidersHorizontal,
+  Repeat,
 } from 'lucide-react'
 
 const iconMap = {
   LayoutDashboard,
   MessageSquare,
+  Inbox,
   Send,
   Users,
   TrendingUp,
@@ -108,6 +120,16 @@ const iconMap = {
   Layout,
   Zap,
   Printer,
+  Folder,
+  Save,
+  HelpCircle,
+  Webhook,
+  UserPlus,
+  UserCheck,
+  Building2,
+  Layers,
+  SlidersHorizontal,
+  Repeat,
 }
 
 export default function Icon({ name, size = 18, className = '' }) {

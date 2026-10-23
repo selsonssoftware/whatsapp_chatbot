@@ -1,742 +1,603 @@
 import { useState } from 'react'
 import {
-  getAutomations,
-  saveAutomations,
-  validateWorkflow,
-  simulateWorkflowRun,
-} from '../../services/automationService.js'
-import { Button, Card, Badge, SearchBar, Icon } from '../../components/index.js'
-
-const NODE_TYPES = [
-  { type: 'Trigger', icon: 'Play', color: 'bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400' },
-  { type: 'Send Message', icon: 'Send', color: 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400' },
-  { type: 'Send Template', icon: 'FileText', color: 'bg-purple-100 dark:bg-purple-900/20 text-purple-800 dark:text-purple-400' },
-  { type: 'Condition', icon: 'GitBranch', color: 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-400' },
-  { type: 'Delay', icon: 'Clock', color: 'bg-orange-100 dark:bg-orange-900/20 text-orange-800 dark:text-orange-400' },
-  { type: 'Add Tag', icon: 'Tag', color: 'bg-pink-100 dark:bg-pink-900/20 text-pink-800 dark:text-pink-400' },
-  { type: 'Assign Agent', icon: 'Users', color: 'bg-indigo-100 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-400' },
-  { type: 'Add to Group', icon: 'Users', color: 'bg-teal-100 dark:bg-teal-900/20 text-teal-800 dark:text-teal-400' },
-  { type: 'AI Agent', icon: 'Sparkles', color: 'bg-amber-100 dark:bg-amber-900/20 text-amber-800 dark:text-amber-400' },
-  { type: 'Webhook', icon: 'Code', color: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300' },
-  { type: 'End', icon: 'XCircle', color: 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-400' },
-]
+  Workflow,
+  CheckCircle2,
+  Zap,
+  Play,
+  Pause,
+  Save,
+  Plus,
+  Edit2,
+  Trash2,
+  Search,
+  Filter,
+  Calendar,
+  MoreVertical,
+  ChevronLeft,
+  ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  GitBranch,
+  Clock,
+  Tag,
+  Users,
+  Code,
+  XCircle,
+  FileText,
+  MessageSquare,
+  Sparkles,
+  Smile,
+  X,
+} from 'lucide-react'
+import { BLAST_KPIS, AUTOMATIONS_DATA } from '../../data/mockBlastData.js'
 
 export default function AutomationPage() {
-  const [items, setItems] = useState(() => getAutomations())
-  const [editing, setEditing] = useState(null)
-  const [nodes, setNodes] = useState([])
-  const [edges, setEdges] = useState([])
-  const [selectedNode, setSelectedNode] = useState(null)
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [automations, setAutomations] = useState(AUTOMATIONS_DATA)
+  const [flowTitle, setFlowTitle] = useState('Welcome & Onboarding Flow')
+  const [isActive, setIsActive] = useState(true)
+  const [selectedNode, setSelectedNode] = useState('sendMsg1')
+  const [zoom, setZoom] = useState(100)
   const [search, setSearch] = useState('')
-  const [nodeCounter, setNodeCounter] = useState(0)
-  const [validationErrors, setValidationErrors] = useState([])
-  const [runResult, setRunResult] = useState(null)
-  const [notice, setNotice] = useState('')
+  const [feedback, setFeedback] = useState(null)
 
-  const persist = (next) => {
-    setItems(next)
-    saveAutomations(next)
+  // Node settings state
+  const [nodeSettings, setNodeSettings] = useState({
+    type: 'Text Message',
+    content: 'Welcome back {{name}}!\nHow can I help you today?',
+    quickReplies: true,
+    replies: ['View Products', 'Talk to Agent', 'Check Order Status', 'Other'],
+    nextStep: 'Wait for Reply',
+  })
+
+  const handleTestFlow = () => {
+    setFeedback('Test flow triggered successfully for test contact!')
+    setTimeout(() => setFeedback(null), 3500)
   }
 
-  const create = () => {
-    const wf = {
-      id: items.reduce((max, w) => Math.max(max, Number(w.id) || 0), 0) + 1,
-      name: 'New Workflow',
-      description: '',
-      status: 'Draft',
-      enabled: false,
-      trigger: '',
-      triggerType: 'Event',
-      triggerKeyword: '',
-      triggerTime: '',
-      nodes: [],
-      edges: [],
-      executions: 0,
-      lastRunAt: '',
-      updatedAt: new Date().toISOString().slice(0, 10),
-    }
-    persist([...items, wf])
-    openEditor(wf)
-  }
-
-  const openEditor = (wf) => {
-    setEditing(wf)
-    setNodes(
-      (wf.nodes || []).map((n, index) => ({
-        ...n,
-        runs: n.runs || 0,
-        x: Number.isFinite(n.x) ? n.x : 40 + (index % 3) * 180,
-        y: Number.isFinite(n.y) ? n.y : 40 + Math.floor(index / 3) * 120,
-      }))
-    )
-    setEdges(wf.edges || [])
-    setSelectedNode(null)
-    setValidationErrors([])
-    setRunResult(null)
-    setNotice('')
-    const maxIndex = (wf.nodes || []).reduce((max, n) => {
-      const parsed = parseInt(String(n.id).replace(/^n/, ''), 10)
-      return Number.isNaN(parsed) ? max : Math.max(max, parsed)
-    }, 0)
-    setNodeCounter(maxIndex)
-  }
-
-  const addNode = (type) => {
-    const n = {
-      id: 'n' + (nodeCounter + 1),
-      type,
-      config: type === 'Trigger' ? { triggerType: 'Event', event: 'new_contact' } : {},
-      runs: 0,
-      x: 40 + (nodes.length % 3) * 180,
-      y: 40 + Math.floor(nodes.length / 3) * 120,
-    }
-    setNodes((prev) => [...prev, n])
-    setNodeCounter((prev) => prev + 1)
-  }
-
-  const removeNode = (id) => {
-    setNodes((prev) => prev.filter((n) => n.id !== id))
-    setEdges((prev) => prev.filter((e) => e.from !== id && e.to !== id))
-    if (selectedNode?.id === id) setSelectedNode(null)
-  }
-
-  const updateConfig = (id, key, value) => {
-    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, config: { ...n.config, [key]: value } } : n)))
-    const node = nodes.find((n) => n.id === id)
-    if (node?.type === 'Trigger') {
-      const triggerType = key === 'triggerType' ? value : node.config.triggerType
-      const label =
-        triggerType === 'Keyword'
-          ? `keyword:${node.config.keyword || ''}`
-          : triggerType === 'Schedule'
-            ? `schedule:${node.config.time || ''}`
-            : node.config.event || 'event'
-      setEditing((prev) => (prev ? { ...prev, trigger: label } : prev))
-    }
-  }
-
-  const connect = (from, to) => {
-    if (from === to) return
-    if (edges.some((e) => e.from === from && e.to === to)) return
-    setEdges((prev) => [...prev, { from, to }])
-  }
-
-  const removeEdge = (from, to) => {
-    setEdges((prev) => prev.filter((e) => !(e.from === from && e.to === to)))
-  }
-
-  const validate = () => {
-    const errors = validateWorkflow(nodes, edges)
-    setValidationErrors(errors)
-    return errors
-  }
-
-  const save = (statusOverride) => {
-    const errors = validate()
-    if (statusOverride === 'Active' && errors.length) {
-      setNotice('Workflow cannot be activated until validation errors are fixed')
-      return
-    }
-    const updated = {
-      ...editing,
-      name: editing.name,
-      description: editing.description,
-      trigger: editing.trigger,
-      nodes: nodes.map((n) => ({ ...n, runs: n.runs || 0 })),
-      edges,
-      status: statusOverride || editing.status,
-      enabled: statusOverride === 'Active' ? true : statusOverride === 'Paused' ? false : editing.enabled,
-      updatedAt: new Date().toISOString().slice(0, 10),
-    }
-    persist(items.map((w) => (w.id === editing.id ? updated : w)))
-    setEditing(updated)
-    setNotice(statusOverride ? `Workflow ${statusOverride.toLowerCase()}d` : 'Draft saved')
-  }
-
-  const activate = () => {
-    save('Active')
-  }
-
-  const pause = (id) => {
-    persist(
-      items.map((w) =>
-        w.id === id ? { ...w, status: 'Paused', enabled: false, updatedAt: new Date().toISOString().slice(0, 10) } : w
-      )
-    )
-    setNotice('Workflow paused')
-  }
-
-  const toggleEnabled = (wf) => {
-    const nextEnabled = !wf.enabled
-    persist(
-      items.map((w) =>
-        w.id === wf.id
-          ? {
-              ...w,
-              enabled: nextEnabled,
-              status: nextEnabled ? 'Active' : 'Paused',
-              updatedAt: new Date().toISOString().slice(0, 10),
-            }
-          : w
-      )
-    )
-    setNotice(`${wf.name} ${nextEnabled ? 'enabled' : 'disabled'}`)
-  }
-
-  const testRun = () => {
-    const errors = validate()
-    if (errors.length) {
-      setRunResult(null)
-      return
-    }
-    const result = simulateWorkflowRun(nodes, edges)
-    const runNodeIds = new Set(result.path)
-    const updatedNodes = nodes.map((n) => ({ ...n, runs: (n.runs || 0) + (runNodeIds.has(n.id) ? 1 : 0) }))
-    setNodes(updatedNodes)
-
-    const lastRunAt = new Date().toISOString().slice(0, 10)
-    const updated = {
-      ...editing,
-      nodes: updatedNodes,
-      edges,
-      executions: (editing.executions || 0) + 1,
-      lastRunAt,
-      updatedAt: lastRunAt,
-    }
-    persist(items.map((w) => (w.id === editing.id ? updated : w)))
-    setEditing(updated)
-    setRunResult(result)
-    setNotice('Test run simulated locally — no messages were sent')
-  }
-
-  const duplicate = (wf) => {
-    const idMap = new Map()
-    const copiedNodes = (wf.nodes || []).map((n) => {
-      const newId = `${n.id}c${idMap.size}`
-      idMap.set(n.id, newId)
-      return { ...n, id: newId, runs: 0 }
-    })
-    const copy = {
-      ...wf,
-      id: items.reduce((max, w) => Math.max(max, Number(w.id) || 0), 0) + 1,
-      name: wf.name + ' (Copy)',
-      status: 'Draft',
-      enabled: false,
-      executions: 0,
-      lastRunAt: '',
-      nodes: copiedNodes,
-      edges: (wf.edges || []).map((e) => ({
-        from: idMap.get(e.from) || e.from,
-        to: idMap.get(e.to) || e.to,
-      })),
-      updatedAt: new Date().toISOString().slice(0, 10),
-    }
-    persist([...items, copy])
-    setNotice(`Duplicated "${wf.name}"`)
-  }
-
-  const deleteWorkflow = (id) => {
-    if (!confirm('Delete this workflow?')) return
-    persist(items.filter((w) => w.id !== id))
-    setNotice('Workflow deleted')
-  }
-
-  const filtered = items.filter(
-    (w) => (statusFilter === 'all' || w.status.toLowerCase() === statusFilter) && w.name.toLowerCase().includes(search.toLowerCase())
-  )
-
-  const nodeTypeInfo = NODE_TYPES.find((nt) => nt.type === selectedNode?.type)
-
-  const canvasWidth = Math.max(620, ...nodes.map((n) => (Number.isFinite(n.x) ? n.x : 40) + 190))
-  const canvasHeight = Math.max(500, ...nodes.map((n) => (Number.isFinite(n.y) ? n.y : 40) + 110))
-
-  if (editing) {
-    return (
-      <div className="page">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Workflow Editor</h1>
-            <p className="text-gray-600 dark:text-gray-400">Build automation workflows by adding and connecting nodes</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={testRun}>
-              <Icon name="Play" size={16} />
-              Test Run
-            </Button>
-            <Button variant="secondary" onClick={() => save()}>
-              <Icon name="Save" size={16} />
-              Save Draft
-            </Button>
-            <Button variant="primary" onClick={activate}>
-              <Icon name="Play" size={16} />
-              Activate
-            </Button>
-            <Button variant="secondary" onClick={() => setEditing(null)}>
-              Back
-            </Button>
-          </div>
-        </div>
-
-        <Card className="mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Workflow Name</label>
-              <input
-                value={editing.name || ''}
-                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-              <input
-                value={editing.description || ''}
-                onChange={(e) => setEditing({ ...editing, description: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
-              <div className="flex items-center gap-2 pt-1">
-                <Badge variant={editing.status === 'Active' ? 'success' : editing.status === 'Paused' ? 'warning' : 'info'}>
-                  {editing.status}
-                </Badge>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  Executions: {editing.executions || 0}
-                </span>
-                {editing.lastRunAt && (
-                  <span className="text-xs text-gray-500 dark:text-gray-400">Last run: {editing.lastRunAt}</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {notice && (
-            <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
-              <Icon name="Info" size={14} className="inline mr-1" />
-              {notice}
-            </p>
-          )}
-
-          {validationErrors.length > 0 && (
-            <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
-              <p className="text-sm font-semibold text-red-700 dark:text-red-300">Fix before activating</p>
-              <ul className="mt-1 list-disc pl-5 text-sm text-red-600 dark:text-red-400">
-                {validationErrors.map((err) => (
-                  <li key={err}>{err}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {runResult && (
-            <div className="mt-3 rounded-md border border-gray-200 p-3 dark:border-gray-700">
-              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Simulated execution path</p>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                {runResult.path
-                  .map((id) => {
-                    const node = nodes.find((n) => n.id === id)
-                    return node ? `${node.type} (${node.id})` : id
-                  })
-                  .join(' → ')}
-              </p>
-              {runResult.unvisited.length > 0 && (
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Not reached: {runResult.unvisited.join(', ')}
-                </p>
-              )}
-            </div>
-          )}
-        </Card>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <Card title="Node Palette" className="lg:col-span-1">
-            <div className="space-y-2">
-              {NODE_TYPES.map((nt) => (
-                <button
-                  key={nt.type}
-                  onClick={() => addNode(nt.type)}
-                  className={`w-full flex items-center gap-2 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${nt.color}`}
-                >
-                  <Icon name={nt.icon} size={18} />
-                  <span className="text-sm font-medium">{nt.type}</span>
-                </button>
-              ))}
-            </div>
-          </Card>
-
-          <Card title="Workflow Canvas" className="lg:col-span-2">
-            <div className="relative min-h-[500px] bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-auto">
-              <svg className="absolute left-0 top-0 pointer-events-none" style={{ width: canvasWidth, height: canvasHeight }}>
-                {edges.map((edge, index) => {
-                  const fromNode = nodes.find((n) => n.id === edge.from)
-                  const toNode = nodes.find((n) => n.id === edge.to)
-                  if (!fromNode || !toNode) return null
-                  const fromX = Number.isFinite(fromNode.x) ? fromNode.x : 0
-                  const fromY = Number.isFinite(fromNode.y) ? fromNode.y : 0
-                  const toX = Number.isFinite(toNode.x) ? toNode.x : 0
-                  const toY = Number.isFinite(toNode.y) ? toNode.y : 0
-                  return (
-                    <line
-                      key={index}
-                      x1={fromX + 75}
-                      y1={fromY + 25}
-                      x2={toX}
-                      y2={toY + 25}
-                      stroke="#00C667"
-                      strokeWidth="2"
-                      markerEnd="url(#arrowhead)"
-                    />
-                  )
-                })}
-                <defs>
-                  <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#00C667" />
-                  </marker>
-                </defs>
-              </svg>
-              {nodes.map((n) => {
-                const nt = NODE_TYPES.find((t) => t.type === n.type)
-                return (
-                  <div
-                    key={n.id}
-                    onClick={() => setSelectedNode(n)}
-                    className={`absolute p-3 rounded-lg border-2 cursor-pointer transition-shadow ${nt.color} ${selectedNode?.id === n.id ? 'border-brand-500 shadow-lg' : 'border-transparent'}`}
-                    style={{ left: n.x, top: n.y, width: '150px' }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Icon name={nt.icon} size={16} />
-                      <span className="text-xs font-medium truncate">{n.type}</span>
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); removeNode(n.id) }}
-                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          </Card>
-
-          <Card title="Node Configuration" className="lg:col-span-1">
-            {selectedNode ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Node Type</label>
-                  <Badge className={nodeTypeInfo?.color}>{selectedNode.type}</Badge>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Node ID</label>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{selectedNode.id}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Runs</label>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{selectedNode.runs || 0}</p>
-                </div>
-
-                {selectedNode.type === 'Trigger' && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Trigger Type</label>
-                      <select
-                        value={selectedNode.config.triggerType || 'Event'}
-                        onChange={(e) => updateConfig(selectedNode.id, 'triggerType', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                      >
-                        <option value="Event">Event</option>
-                        <option value="Keyword">Keyword</option>
-                        <option value="Schedule">Schedule</option>
-                      </select>
-                    </div>
-                    {(selectedNode.config.triggerType || 'Event') === 'Keyword' && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Keyword</label>
-                        <input
-                          type="text"
-                          value={selectedNode.config.keyword || ''}
-                          onChange={(e) => updateConfig(selectedNode.id, 'keyword', e.target.value)}
-                          placeholder="e.g., order, help"
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                        />
-                      </div>
-                    )}
-                    {(selectedNode.config.triggerType || 'Event') === 'Schedule' && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Schedule Time</label>
-                        <input
-                          type="time"
-                          value={selectedNode.config.time || ''}
-                          onChange={(e) => updateConfig(selectedNode.id, 'time', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                        />
-                      </div>
-                    )}
-                    {(selectedNode.config.triggerType || 'Event') === 'Event' && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Event</label>
-                        <select
-                          value={selectedNode.config.event || 'new_contact'}
-                          onChange={(e) => updateConfig(selectedNode.id, 'event', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                        >
-                          <option value="new_contact">New contact</option>
-                          <option value="message_received">Message received</option>
-                          <option value="tag_added">Tag added</option>
-                          <option value="campaign_replied">Campaign reply</option>
-                        </select>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {selectedNode.type === 'AI Agent' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">AI Agent</label>
-                    <input
-                      type="text"
-                      value={selectedNode.config.agent || ''}
-                      onChange={(e) => updateConfig(selectedNode.id, 'agent', e.target.value)}
-                      placeholder="Agent name"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                    />
-                  </div>
-                )}
-
-                {selectedNode.type === 'Add to Group' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Group</label>
-                    <input
-                      type="text"
-                      value={selectedNode.config.group || ''}
-                      onChange={(e) => updateConfig(selectedNode.id, 'group', e.target.value)}
-                      placeholder="Group name"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                    />
-                  </div>
-                )}
-
-                {selectedNode.type === 'Webhook' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Webhook URL</label>
-                    <input
-                      type="text"
-                      value={selectedNode.config.url || ''}
-                      onChange={(e) => updateConfig(selectedNode.id, 'url', e.target.value)}
-                      placeholder="https://example.com/hook"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                    />
-                  </div>
-                )}
-
-                {selectedNode.type === 'Send Message' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Message</label>
-                    <textarea
-                      value={selectedNode.config.message || ''}
-                      onChange={(e) => updateConfig(selectedNode.id, 'message', e.target.value)}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                    />
-                  </div>
-                )}
-
-                {selectedNode.type === 'Send Template' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Template ID</label>
-                    <input
-                      type="text"
-                      value={selectedNode.config.templateId || ''}
-                      onChange={(e) => updateConfig(selectedNode.id, 'templateId', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                    />
-                  </div>
-                )}
-
-                {selectedNode.type === 'Delay' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Duration (minutes)</label>
-                    <input
-                      type="number"
-                      value={selectedNode.config.duration || ''}
-                      onChange={(e) => updateConfig(selectedNode.id, 'duration', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                    />
-                  </div>
-                )}
-
-                {selectedNode.type === 'Condition' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Field</label>
-                    <input
-                      type="text"
-                      value={selectedNode.config.field || ''}
-                      onChange={(e) => updateConfig(selectedNode.id, 'field', e.target.value)}
-                      placeholder="e.g., tag, status"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                    />
-                  </div>
-                )}
-
-                {selectedNode.type === 'Add Tag' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tag</label>
-                    <input
-                      type="text"
-                      value={selectedNode.config.tag || ''}
-                      onChange={(e) => updateConfig(selectedNode.id, 'tag', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                    />
-                  </div>
-                )}
-
-                {selectedNode.type === 'Assign Agent' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Agent</label>
-                    <input
-                      type="text"
-                      value={selectedNode.config.agent || ''}
-                      onChange={(e) => updateConfig(selectedNode.id, 'agent', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Connect To</label>
-                  <div className="space-y-2">
-                    {nodes
-                      .filter((n) => n.id !== selectedNode.id)
-                      .map((n) => {
-                        const isConnected = edges.some((e) => e.from === selectedNode.id && e.to === n.id)
-                        return (
-                          <button
-                            key={n.id}
-                            onClick={() => (isConnected ? removeEdge(selectedNode.id, n.id) : connect(selectedNode.id, n.id))}
-                            className={`w-full flex items-center justify-between p-2 rounded border ${
-                              isConnected ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20' : 'border-gray-200 dark:border-gray-700'
-                            }`}
-                          >
-                            <span className="text-sm">{n.type}</span>
-                            {isConnected ? <Icon name="X" size={14} /> : <Icon name="Plus" size={14} />}
-                          </button>
-                        )
-                      })}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-600 dark:text-gray-400">Select a node to configure</p>
-            )}
-          </Card>
-        </div>
-      </div>
-    )
+  const handlePublish = () => {
+    setFeedback('Workflow "' + flowTitle + '" published and activated!')
+    setTimeout(() => setFeedback(null), 3500)
   }
 
   return (
-    <div className="page">
-      <div className="flex items-center justify-between mb-6">
+    <div className="flex flex-col space-y-4 text-slate-800 dark:text-slate-100">
+      {/* Page Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Automation</h1>
-          <p className="text-gray-600 dark:text-gray-400">Create automated workflows for your messaging operations</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Automation
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Create automated workflows to engage, follow up and convert your customers on WhatsApp.
+          </p>
         </div>
-        <Button variant="primary" onClick={create}>
-          <Icon name="Plus" size={16} />
-          Create Workflow
-        </Button>
-      </div>
 
-      <div className="flex items-center gap-4 mb-6">
-        <SearchBar value={search} onChange={setSearch} placeholder="Search workflows..." />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-        >
-          <option value="all">All Status</option>
-          <option value="draft">Draft</option>
-          <option value="active">Active</option>
-          <option value="paused">Paused</option>
-        </select>
-      </div>
-
-      {notice && (
-        <div className="mb-4 flex items-center justify-between rounded-md border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-700 dark:border-brand-800 dark:bg-brand-900/20 dark:text-brand-300">
-          <span>{notice}</span>
-          <button className="text-xs underline" onClick={() => setNotice('')}>
-            Dismiss
+        <div className="flex items-center gap-3">
+          <button className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+            Template Library
           </button>
+          <button
+            onClick={() => handlePublish()}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-[#00A884] hover:bg-[#008f6f] text-white rounded-xl shadow-sm transition"
+          >
+            <Plus className="w-4 h-4" />
+            Create Automation
+          </button>
+        </div>
+      </div>
+
+      {feedback && (
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-sm flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          {feedback}
         </div>
       )}
 
-      <Card>
-        <div className="table-container">
-          <table>
-            <thead>
+      {/* 4 KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Total Automations</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-[#00A884]">
+              <Workflow className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.automation.total.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.automation.total.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.automation.total.period}</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Active Automations</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.automation.active.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.automation.active.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.automation.active.period}</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Total Executions</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-[#00A884]">
+              <Zap className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.automation.executions.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.automation.executions.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.automation.executions.period}</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-slate-500">Success Rate</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+              {BLAST_KPIS.automation.successRate.value}
+            </h3>
+            <span className="text-xs font-semibold text-emerald-600">
+              {BLAST_KPIS.automation.successRate.change}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1">{BLAST_KPIS.automation.successRate.period}</p>
+        </div>
+      </div>
+
+      {/* Visual Workflow Canvas Builder */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+        {/* Canvas Toolbar Header */}
+        <div className="p-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/70 dark:bg-slate-900/60">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 font-bold text-sm text-slate-900 dark:text-white">
+              <input
+                type="text"
+                value={flowTitle}
+                onChange={(e) => setFlowTitle(e.target.value)}
+                className="bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:outline-none focus:border-[#00A884] font-bold text-slate-900 dark:text-white px-1"
+              />
+              <Edit2 className="w-3.5 h-3.5 text-slate-400" />
+            </div>
+
+            <div className="flex items-center gap-2 border-l border-slate-200 dark:border-slate-700 pl-3">
+              <button
+                onClick={() => setIsActive((v) => !v)}
+                className={`w-9 h-5 rounded-full transition relative ${
+                  isActive ? 'bg-[#00A884]' : 'bg-slate-300 dark:bg-slate-700'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition ${
+                    isActive ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                {isActive ? 'Active' : 'Paused'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleTestFlow}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 shadow-2xs"
+            >
+              <Play className="w-3 h-3 text-[#00A884]" />
+              Test Flow
+            </button>
+            <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 shadow-2xs">
+              <Save className="w-3 h-3 text-slate-600 dark:text-slate-300" />
+              Save
+            </button>
+            <button
+              onClick={handlePublish}
+              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold bg-[#00A884] hover:bg-[#008f6f] text-white rounded-lg shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Publish
+            </button>
+
+            {/* Zoom Controls */}
+            <div className="flex items-center border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-800 text-xs">
+              <button
+                onClick={() => setZoom((z) => Math.max(50, z - 10))}
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700"
+              >
+                <ZoomOut className="w-3.5 h-3.5" />
+              </button>
+              <span className="px-2 font-mono text-[11px] text-slate-500">{zoom}%</span>
+              <button
+                onClick={() => setZoom((z) => Math.min(150, z + 10))}
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700"
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 3-Section Canvas: Palette (Left), Diagram (Center), Inspector (Right) */}
+        <div className="grid grid-cols-12 min-h-[520px]">
+          {/* Left: Add Node Palette (2 cols) */}
+          <div className="col-span-2 border-r border-slate-200 dark:border-slate-800 p-3 space-y-4 bg-slate-50/50 dark:bg-slate-900/50 text-xs">
+            <div>
+              <span className="font-bold uppercase tracking-wider text-[10px] text-slate-400 block mb-2">
+                Messages
+              </span>
+              <div className="space-y-1">
+                {['Send Message', 'Send Template', 'Send Media', 'Interactive Message'].map((m) => (
+                  <div
+                    key={m}
+                    className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-[#00A884] cursor-grab flex items-center gap-2 shadow-2xs"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-[#00A884]" />
+                    <span className="text-[11px] font-medium truncate">{m}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <span className="font-bold uppercase tracking-wider text-[10px] text-slate-400 block mb-2">
+                Logic
+              </span>
+              <div className="space-y-1">
+                {['Condition', 'Wait / Delay', 'A/B Split', 'Tag Contact', 'Update Field'].map((l) => (
+                  <div
+                    key={l}
+                    className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-amber-500 cursor-grab flex items-center gap-2 shadow-2xs"
+                  >
+                    <GitBranch className="w-3.5 h-3.5 text-amber-500" />
+                    <span className="text-[11px] font-medium truncate">{l}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <span className="font-bold uppercase tracking-wider text-[10px] text-slate-400 block mb-2">
+                Actions
+              </span>
+              <div className="space-y-1">
+                {['Assign to Agent', 'Add to Group', 'Webhook', 'End Flow'].map((a) => (
+                  <div
+                    key={a}
+                    className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-blue-500 cursor-grab flex items-center gap-2 shadow-2xs"
+                  >
+                    <Users className="w-3.5 h-3.5 text-blue-500" />
+                    <span className="text-[11px] font-medium truncate">{a}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Center: Interactive Workflow Canvas (7 cols) */}
+          <div className="col-span-7 bg-[#F8FAFB] dark:bg-slate-950/40 p-6 relative overflow-auto flex flex-col items-center">
+            {/* SVG Connecting Paths */}
+            <div className="w-full flex flex-col items-center space-y-4">
+              {/* Trigger Node */}
+              <div className="w-64 p-3 bg-white dark:bg-slate-900 rounded-xl border-2 border-emerald-500 shadow-xs text-xs relative">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-[10px]">
+                    <Play className="w-3 h-3 fill-emerald-600" />
+                  </div>
+                  <span className="font-bold text-slate-900 dark:text-white">Trigger</span>
+                </div>
+                <p className="text-[11px] text-slate-500">When a new message is received</p>
+                <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white" />
+              </div>
+
+              {/* Connecting line */}
+              <div className="w-0.5 h-6 bg-slate-300 dark:bg-slate-700" />
+
+              {/* Condition Node */}
+              <div className="w-64 p-3 bg-white dark:bg-slate-900 rounded-xl border border-amber-300 dark:border-amber-700 shadow-xs text-xs relative">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center font-bold text-[10px]">
+                    <GitBranch className="w-3 h-3" />
+                  </div>
+                  <span className="font-bold text-slate-900 dark:text-white">Condition</span>
+                </div>
+                <p className="text-[11px] text-slate-500">Is contact in database?</p>
+              </div>
+
+              {/* Split Branches */}
+              <div className="w-full max-w-xl flex justify-between gap-6 pt-2">
+                {/* Branch YES (Left) */}
+                <div className="flex-1 flex flex-col items-center space-y-4">
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
+                    Yes
+                  </span>
+
+                  {/* Send Message Node (Selected) */}
+                  <div
+                    onClick={() => setSelectedNode('sendMsg1')}
+                    className={`w-56 p-3 bg-white dark:bg-slate-900 rounded-xl border-2 transition cursor-pointer shadow-xs text-xs ${
+                      selectedNode === 'sendMsg1'
+                        ? 'border-[#00A884] ring-2 ring-[#00A884]/20'
+                        : 'border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <MessageSquare className="w-4 h-4 text-[#00A884]" />
+                      <span className="font-bold text-slate-900 dark:text-white">Send Message</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      Welcome back {'{{name}}'}! How can I help you today?
+                    </p>
+                  </div>
+
+                  <div className="w-0.5 h-5 bg-slate-300 dark:bg-slate-700" />
+
+                  {/* Delay Node */}
+                  <div className="w-56 p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs text-xs">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <Clock className="w-3.5 h-3.5 text-purple-500" />
+                      <span className="font-bold text-slate-900 dark:text-white">Wait 1 minute</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400">Wait for customer reply</p>
+                  </div>
+                </div>
+
+                {/* Branch NO (Right) */}
+                <div className="flex-1 flex flex-col items-center space-y-4">
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-rose-100 text-rose-800 rounded-full">
+                    No
+                  </span>
+
+                  {/* Send Welcome Message */}
+                  <div className="w-56 p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs text-xs">
+                    <div className="flex items-center gap-2 mb-1">
+                      <MessageSquare className="w-4 h-4 text-[#00A884]" />
+                      <span className="font-bold text-slate-900 dark:text-white">Send Message</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      Hi there! Welcome to BlastWhatsApp! Please share your name.
+                    </p>
+                  </div>
+
+                  <div className="w-0.5 h-5 bg-slate-300 dark:bg-slate-700" />
+
+                  {/* Add to Group Node */}
+                  <div className="w-56 p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs text-xs">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <Users className="w-3.5 h-3.5 text-blue-500" />
+                      <span className="font-bold text-slate-900 dark:text-white">Add to Group</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400">Add to 'New Leads' group</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Node Settings Panel (3 cols) */}
+          <div className="col-span-3 border-l border-slate-200 dark:border-slate-800 p-4 space-y-4 bg-white dark:bg-slate-900 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-[#00A884]" />
+                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Send Message</h4>
+              </div>
+              <button className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                Message Type
+              </label>
+              <select
+                value={nodeSettings.type}
+                onChange={(e) => setNodeSettings((p) => ({ ...p, type: e.target.value }))}
+                className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800"
+              >
+                <option>Text Message</option>
+                <option>Template Message</option>
+                <option>Interactive Button</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                Message Content *
+              </label>
+              <textarea
+                rows={4}
+                value={nodeSettings.content}
+                onChange={(e) => setNodeSettings((p) => ({ ...p, content: e.target.value }))}
+                className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 font-mono text-xs leading-relaxed"
+              />
+              <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1">
+                <button className="text-[#00A884] hover:underline font-medium">
+                  Add Variable ▾
+                </button>
+                <span>{nodeSettings.content.length}/4096</span>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  Enable Quick Replies
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNodeSettings((p) => ({ ...p, quickReplies: !p.quickReplies }))
+                  }
+                  className={`w-8 h-4.5 rounded-full transition relative ${
+                    nodeSettings.quickReplies ? 'bg-[#00A884]' : 'bg-slate-300 dark:bg-slate-700'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition ${
+                      nodeSettings.quickReplies ? 'translate-x-3.5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {nodeSettings.quickReplies && (
+                <div className="space-y-1.5">
+                  {nodeSettings.replies.map((reply, i) => (
+                    <div
+                      key={i}
+                      className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-between text-[11px]"
+                    >
+                      <span>{reply}</span>
+                      <button className="text-slate-400 hover:text-rose-500">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <button className="text-[11px] text-[#00A884] font-semibold hover:underline">
+                    + Add Option
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                Next Step
+              </label>
+              <select
+                value={nodeSettings.nextStep}
+                onChange={(e) => setNodeSettings((p) => ({ ...p, nextStep: e.target.value }))}
+                className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800"
+              >
+                <option>Wait for Reply</option>
+                <option>Send Follow-up</option>
+                <option>Assign to Agent</option>
+                <option>End Flow</option>
+              </select>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button className="w-full flex items-center justify-center gap-1.5 py-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-xl font-semibold border border-rose-200 dark:border-rose-900/40">
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete Node
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Automations List Table */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            {['All Automations', 'Active', 'Paused', 'Drafts'].map((tab) => (
+              <button
+                key={tab}
+                className="px-3 py-1 text-xs font-semibold rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 first:bg-[#00A884]/10 first:text-[#00A884]"
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 text-xs">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search automations..."
+                className="pl-8 pr-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
+              />
+            </div>
+            <select className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs">
+              <option>All Status</option>
+              <option>Active</option>
+              <option>Paused</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 border-y border-slate-200 dark:border-slate-800">
               <tr>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Enabled</th>
-                <th>Trigger</th>
-                <th>Nodes</th>
-                <th>Executions</th>
-                <th>Last Run</th>
-                <th>Last Updated</th>
-                <th>Actions</th>
+                <th className="py-2.5 px-3 w-8">
+                  <input type="checkbox" className="rounded accent-[#00A884]" />
+                </th>
+                <th className="py-2.5 px-2 w-10 font-semibold">#</th>
+                <th className="py-2.5 px-3 font-semibold">Automation Name</th>
+                <th className="py-2.5 px-3 font-semibold">Trigger</th>
+                <th className="py-2.5 px-3 font-semibold">Status</th>
+                <th className="py-2.5 px-3 font-semibold">Executions</th>
+                <th className="py-2.5 px-3 font-semibold">Success Rate</th>
+                <th className="py-2.5 px-3 font-semibold">Last Updated</th>
+                <th className="py-2.5 px-3 text-right font-semibold">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {filtered.map((w) => (
-                <tr key={w.id}>
-                  <td className="font-medium">
-                    {w.name}
-                    {w.description && (
-                      <span className="block text-xs text-gray-500 dark:text-gray-400">{w.description}</span>
-                    )}
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {automations.map((a, idx) => (
+                <tr key={a.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
+                  <td className="py-3 px-3">
+                    <input type="checkbox" className="rounded accent-[#00A884]" />
                   </td>
-                  <td>
-                    <Badge variant={w.status === 'Active' ? 'success' : w.status === 'Paused' ? 'warning' : 'info'}>
-                      {w.status}
-                    </Badge>
+                  <td className="py-3 px-2 text-slate-400 font-mono">{idx + 1}</td>
+                  <td className="py-3 px-3 font-semibold text-slate-900 dark:text-white">
+                    {a.name}
                   </td>
-                  <td>
-                    <button
-                      onClick={() => toggleEnabled(w)}
-                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                        w.enabled ? 'bg-brand-500' : 'bg-gray-300 dark:bg-gray-600'
+                  <td className="py-3 px-3 text-slate-600 dark:text-slate-300">{a.trigger}</td>
+                  <td className="py-3 px-3">
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-semibold ${
+                        a.status === 'Active'
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-amber-500'
                       }`}
-                      aria-label={w.enabled ? 'Disable workflow' : 'Enable workflow'}
                     >
                       <span
-                        className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
-                          w.enabled ? 'translate-x-4' : 'translate-x-0.5'
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          a.status === 'Active' ? 'bg-emerald-500' : 'bg-amber-500'
                         }`}
                       />
-                    </button>
+                      {a.status}
+                    </span>
                   </td>
-                  <td>{w.trigger || '-'}</td>
-                  <td>{(w.nodes || []).length}</td>
-                  <td>{w.executions || 0}</td>
-                  <td>{w.lastRunAt || '-'}</td>
-                  <td>{w.updatedAt}</td>
-                  <td>
-                    <div className="flex gap-2">
-                      <button className="icon-btn" onClick={() => openEditor(w)} aria-label="Edit">
-                        <Icon name="Edit" size={16} />
+                  <td className="py-3 px-3 font-semibold text-slate-700 dark:text-slate-200">
+                    {a.executions}
+                  </td>
+                  <td className="py-3 px-3 text-emerald-600 font-semibold">{a.successRate}</td>
+                  <td className="py-3 px-3 text-slate-400 text-[11px]">{a.lastUpdated}</td>
+                  <td className="py-3 px-3 text-right">
+                    <div className="flex items-center justify-end gap-2 text-slate-400">
+                      <button className="p-1 hover:text-[#00A884] rounded">
+                        <Play className="w-3.5 h-3.5" />
                       </button>
-                      {w.status === 'Active' && (
-                        <button className="icon-btn text-yellow-600" onClick={() => pause(w.id)} aria-label="Pause">
-                          <Icon name="Pause" size={16} />
-                        </button>
-                      )}
-                      <button className="icon-btn" onClick={() => duplicate(w)} aria-label="Duplicate">
-                        <Icon name="Copy" size={16} />
-                      </button>
-                      <button className="icon-btn text-red-600" onClick={() => deleteWorkflow(w.id)} aria-label="Delete">
-                        <Icon name="Trash2" size={16} />
+                      <button className="p-1 hover:text-slate-600 rounded">
+                        <Edit2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
@@ -745,7 +606,7 @@ export default function AutomationPage() {
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
     </div>
   )
 }

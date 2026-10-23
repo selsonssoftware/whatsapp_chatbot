@@ -18,7 +18,9 @@ describe('seed data storage keys', () => {
     const keys = listSeedDataKeys()
     expect(keys).not.toContain('wa_session')
     expect(keys).not.toContain('theme')
-    expect(PRESERVED_STORAGE_KEYS).toEqual(['wa_session', 'theme'])
+    expect(PRESERVED_STORAGE_KEYS).toContain('wa_session')
+    expect(PRESERVED_STORAGE_KEYS).toContain('theme')
+    expect(PRESERVED_STORAGE_KEYS).toContain('wa_admin_accounts')
   })
 
   it('lists every module store exactly once', () => {

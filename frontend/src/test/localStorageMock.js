@@ -26,6 +26,12 @@ class MemoryStorage {
 
 export function installLocalStorage() {
   const storage = new MemoryStorage()
-  globalThis.localStorage = storage
+  // jsdom exposes localStorage as a getter-only property, so it has to be
+  // redefined instead of assigned.
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: storage,
+    configurable: true,
+    writable: true,
+  })
   return storage
 }
