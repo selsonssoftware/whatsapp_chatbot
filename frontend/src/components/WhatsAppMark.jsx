@@ -1,5 +1,5 @@
 /**
- * The WhatsApp inspired brand mark used by the Super Admin area.
+ * The WhatsApp inspired brand mark used across the workspace.
  */
 export default function WhatsAppMark({ size = 22, className = '' }) {
   return (

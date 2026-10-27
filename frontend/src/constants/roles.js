@@ -1,7 +1,6 @@
 export const ROLES = {
   ADMIN: 'Admin',
   SUPPORTER: 'Supporter',
-  SUPER_ADMIN: 'super_admin',
 }
 
 export const SUPPORTER_MANAGER_ROLES = [ROLES.ADMIN]
@@ -42,3 +41,7 @@ export const NAV_ITEMS = [
   { label: 'Team & Roles', path: '/team', icon: 'Shield', roles: [ROLES.ADMIN], hasChildren: true },
   { label: 'Settings', path: '/settings', icon: 'Settings', roles: [ROLES.ADMIN] },
 ]
+
+export function dashboardPathForRole(role) {
+  return role === ROLES.SUPPORTER ? '/supporter/inbox' : '/dashboard'
+}

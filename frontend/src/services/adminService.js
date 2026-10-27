@@ -26,6 +26,9 @@ export function loginAdminWithApi({ login, password }) {
   return apiRequest(LOGIN_ADMIN_ENDPOINT, {
     allowInSimulation: true,
     method: 'POST',
+    // The backend may establish the Sanctum session with a cookie. This keeps
+    // that cookie so subsequent settings requests can authenticate.
+    credentials: 'include',
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',

@@ -1,28 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Eye, EyeOff, Lock, Mail, MessageSquare, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth.js'
-import { useSuperAdminAuth } from '../../hooks/useSuperAdminAuth.js'
-import { ROLES, USERS } from '../../constants/roles.js'
-import { SUPER_ADMIN_DASHBOARD_PATH, dashboardPathForRole } from '../../constants/superAdmin.js'
+import { ROLES, dashboardPathForRole } from '../../constants/roles.js'
 import { Button, Notice } from '../../components/index.js'
-import { authenticateAdmin, getAdminAccounts } from '../../services/authService.js'
-import { getSupporters } from '../../services/supporterService.js'
 import { loginAdminWithApi } from '../../services/adminService.js'
-
-const initials = (name) =>
-  String(name || '')
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0].toUpperCase())
-    .join('')
 
 export default function LoginPage() {
   const { login: workspaceLogin, isAuthenticated, user: workspaceUser } = useAuth()
-  const { login: superAdminLogin, status: saStatus, user: saUser } = useSuperAdminAuth()
   const navigate = useNavigate()
-  const location = useLocation()
 
   const [credentials, setCredentials] = useState({
     email: '',
@@ -34,23 +20,10 @@ export default function LoginPage() {
 
   // Redirect users who are already signed in to their designated dashboard
   useEffect(() => {
-    if (saStatus === 'authenticated' && saUser?.role === ROLES.SUPER_ADMIN) {
-      const from = location.state?.from
-      const target =
-        typeof from === 'string' && from.startsWith('/super-admin/')
-          ? from
-          : SUPER_ADMIN_DASHBOARD_PATH
-      navigate(target, { replace: true })
-    } else if (isAuthenticated && workspaceUser) {
+    if (isAuthenticated && workspaceUser) {
       navigate(dashboardPathForRole(workspaceUser.role), { replace: true })
     }
-  }, [saStatus, saUser, isAuthenticated, workspaceUser, navigate, location.state])
-
-  const handleWorkspaceQuickLogin = (user) => {
-    workspaceLogin(user)
-    const target = dashboardPathForRole(user.role)
-    navigate(target, { replace: true })
-  }
+  }, [isAuthenticated, workspaceUser, navigate])
 
   const handlePasswordLogin = async (event) => {
     event.preventDefault()
@@ -69,107 +42,22 @@ export default function LoginPage() {
     setIsSubmitting(true)
 
     try {
-      // 1. First, attempt Super Admin authentication against the secure backend API
-      let saAttemptError = null
-      try {
-        const saResult = await superAdminLogin({
-          login: trimmedLogin,
-          password,
-        })
+      const response = await loginAdminWithApi({ login: trimmedLogin, password })
+      const admin = response?.admin
 
-        if (saResult && (saResult.role === ROLES.SUPER_ADMIN || saResult.role === 'super_admin')) {
-          const from = location.state?.from
-          const target =
-            typeof from === 'string' && from.startsWith('/super-admin/')
-              ? from
-              : SUPER_ADMIN_DASHBOARD_PATH
-          navigate(target, { replace: true })
-          return
-        }
-      } catch (err) {
-        saAttemptError = err
-        // If rate limited, propagate immediately
-        if (err.status === 429) {
-          throw err
-        }
+      if (response?.status !== true || !admin?.admin_id || !admin?.name || !admin?.email) {
+        throw new Error(response?.message || 'The login response was incomplete. Please try again.')
       }
 
-      // 2. Next, check registered workspace accounts (Admin accounts in localStorage)
-      const registeredAccounts = getAdminAccounts()
-      const registeredSession = authenticateAdmin(registeredAccounts, {
-        email: trimmedLogin,
-        password,
-      })
-
-      if (registeredSession) {
-        const sessionUser = {
-          id: registeredSession.id,
-          name: registeredSession.name,
-          email: registeredSession.email,
-          role: registeredSession.role || ROLES.ADMIN,
-        }
-        workspaceLogin(sessionUser)
-        navigate(dashboardPathForRole(sessionUser.role), { replace: true })
-        return
+      const sessionUser = {
+        id: admin.admin_id,
+        name: admin.name,
+        email: admin.email,
+        role: ROLES.ADMIN,
       }
 
-      // 3. Check demo/seed workspace accounts (Admin and Supporter)
-      const lowerLogin = trimmedLogin.toLowerCase()
-      const matchedDemoUser = USERS.find(
-        (u) =>
-          u.email.toLowerCase() === lowerLogin ||
-          (u.role === ROLES.ADMIN && (lowerLogin === 'admin' || lowerLogin === 'ava')) ||
-          (u.role === ROLES.SUPPORTER && (lowerLogin === 'supporter' || lowerLogin === 'ravi'))
-      )
-
-      const allSupporters = getSupporters()
-      const matchedSupporter = allSupporters.find(
-        (s) => s.email?.toLowerCase() === lowerLogin
-      )
-
-      const isDemoPasswordValid =
-        password === 'admin@123' ||
-        password === 'password' ||
-        password === 'demo123' ||
-        password === 'supporter@123'
-
-      if (matchedDemoUser && isDemoPasswordValid) {
-        workspaceLogin(matchedDemoUser)
-        navigate(dashboardPathForRole(matchedDemoUser.role), { replace: true })
-        return
-      }
-
-      if (matchedSupporter && isDemoPasswordValid) {
-        const supUser = {
-          id: matchedSupporter.id,
-          name: matchedSupporter.name,
-          email: matchedSupporter.email,
-          role: ROLES.SUPPORTER,
-        }
-        workspaceLogin(supUser)
-        navigate('/supporter/inbox', { replace: true })
-        return
-      }
-
-      // 4. Try live workspace API if available
-      try {
-        const liveAdminRes = await loginAdminWithApi({ login: trimmedLogin, password })
-        if (liveAdminRes && liveAdminRes.user) {
-          workspaceLogin(liveAdminRes.user)
-          navigate(dashboardPathForRole(liveAdminRes.user.role || ROLES.ADMIN), { replace: true })
-          return
-        }
-      } catch {
-        // live workspace API not reachable or rejected
-      }
-
-      // 5. If Super Admin session had CSRF expiration, inform user
-      if (saAttemptError?.status === 419) {
-        throw new Error('Your secure session expired. Please try again.')
-      }
-
-      // 6. Otherwise reject with invalid credentials
-      throw new Error('Invalid login ID or password. Please verify your credentials.')
+      workspaceLogin(sessionUser)
+      navigate(dashboardPathForRole(sessionUser.role), { replace: true })
     } catch (err) {
       if (err.status === 429) {
         setError(err.message || 'Too many sign-in attempts. Please wait a moment and try again.')
@@ -213,15 +101,11 @@ export default function LoginPage() {
               One login for all roles.
             </h2>
             <p className="text-slate-600 leading-relaxed text-sm max-w-md">
-              Sign in with your Super Admin, Admin, or Supporter credentials.
-              The platform automatically routes you to your authorized console.
+              Sign in with your Admin or Supporter credentials.
+              The workspace automatically routes you to your authorized area.
             </p>
 
-            <div className="grid grid-cols-3 gap-3 pt-4">
-              <div className="bg-white/70 backdrop-blur rounded-2xl p-3 border border-slate-200/60 text-left">
-                <span className="text-xs font-semibold text-slate-500 block">Super Admin</span>
-                <span className="text-sm font-bold text-[#007c72]">Platform Console</span>
-              </div>
+            <div className="grid grid-cols-2 gap-3 pt-4">
               <div className="bg-white/70 backdrop-blur rounded-2xl p-3 border border-slate-200/60 text-left">
                 <span className="text-xs font-semibold text-slate-500 block">Admin</span>
                 <span className="text-sm font-bold text-emerald-700">Workspace Hub</span>
@@ -263,54 +147,6 @@ export default function LoginPage() {
                 {error}
               </Notice>
             )}
-
-            {/* Quick Workspace Demo Accounts */}
-            <div className="space-y-2.5 mb-6">
-              <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                Quick Demo Access
-              </span>
-              {USERS.filter((u) => u.role !== 'super_admin').map((user) => (
-                <button
-                  key={user.id}
-                  type="button"
-                  id={`quick-login-${user.role.toLowerCase()}`}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50/70 hover:border-emerald-300 transition text-left"
-                  onClick={() => handleWorkspaceQuickLogin(user)}
-                >
-                  <span className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-semibold text-sm">
-                    {initials(user.name)}
-                  </span>
-
-                  <span className="flex-1 min-w-0">
-                    <span className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-800 truncate">
-                        {user.name}
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                          user.role === ROLES.ADMIN
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-teal-100 text-teal-800'
-                        }`}
-                      >
-                        {user.role}
-                      </span>
-                    </span>
-                    <span className="block text-xs text-slate-500 truncate">
-                      {user.email}
-                    </span>
-                  </span>
-
-                  <ArrowRight size={16} className="text-slate-400 shrink-0" />
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-3 text-xs text-slate-400 mb-5">
-              <span className="flex-1 h-px bg-slate-200" />
-              or sign in with credentials
-              <span className="flex-1 h-px bg-slate-200" />
-            </div>
 
             {/* Credential Form */}
             <form
